@@ -1,0 +1,75 @@
+# Tools Module
+
+The tools module implements the tool system used by agents for executing
+actions such as calculations, memory search, file reading, and sub-model
+queries. Each tool implements the `BaseTool` ABC and is registered via
+`@ToolRegistry.register("name")`. The `ToolExecutor` dispatches tool calls
+with JSON argument parsing, latency tracking, and event bus integration.
+
+## Abstract Base Class
+
+### BaseTool
+
+::: openjarvis.tools._stubs.BaseTool
+    options:
+      show_source: true
+      members_order: source
+
+### ToolSpec
+
+::: openjarvis.tools._stubs.ToolSpec
+    options:
+      show_source: true
+      members_order: source
+
+### ToolExecutor
+
+::: openjarvis.tools._stubs.ToolExecutor
+    options:
+      show_source: true
+      members_order: source
+
+---
+
+## Built-in Tools
+
+### CalculatorTool
+
+::: openjarvis.tools.calculator.CalculatorTool
+    options:
+      show_source: true
+      members_order: source
+
+### safe_eval
+
+::: openjarvis.tools.calculator.safe_eval
+    options:
+      show_source: true
+
+### ThinkTool
+
+::: openjarvis.tools.think.ThinkTool
+    options:
+      show_source: true
+      members_order: source
+
+### RetrievalTool
+
+::: openjarvis.tools.retrieval.RetrievalTool
+    options:
+      show_source: true
+      members_order: source
+
+### LLMTool
+
+::: openjarvis.tools.llm_tool.LLMTool
+    options:
+      show_source: true
+      members_order: source
+
+### FileReadTool
+
+::: openjarvis.tools.file_read.FileReadTool
+    options:
+      show_source: true
+      members_order: source

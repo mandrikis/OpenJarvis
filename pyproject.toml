@@ -55,6 +55,11 @@ server = [
 agents = []
 learning = []
 openclaw = []
+docs = [
+    "mkdocs>=1.6",
+    "mkdocs-material>=9.5",
+    "mkdocstrings[python]>=0.25",
+]
 
 [project.scripts]
 jarvis = "openjarvis.cli:main"

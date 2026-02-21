@@ -1,0 +1,227 @@
+# Changelog
+
+All notable changes to OpenJarvis are documented in this file.
+
+---
+
+## v1.0.0
+
+*Phase 5 -- SDK, Production Readiness, and Documentation*
+
+### Added
+
+- **Python SDK** -- `Jarvis` class providing a high-level sync API for
+  programmatic use
+    - `ask()` / `ask_full()` methods for direct engine and agent mode queries
+    - `MemoryHandle` proxy for lazy memory backend initialization
+    - `list_models()` and `list_engines()` for runtime introspection
+    - Router policy selection via config (`learning.default_policy`)
+    - Lazy engine initialization with automatic discovery and health probing
+    - Resource cleanup via `close()`
+- **OpenClaw agent infrastructure**
+    - `OpenClawAgent` with HTTP and subprocess transports
+    - `ProtocolMessage` dataclass with JSON-line serialization/deserialization
+    - `MessageType` enum for structured agent communication
+    - `HttpTransport` for HTTP POST-based communication with OpenClaw servers
+    - `SubprocessTransport` for Node.js stdin/stdout communication
+    - `ProviderPlugin` wrapping inference engines for OpenClaw
+    - `MemorySearchManager` wrapping memory backends for OpenClaw
+- **Benchmarking framework**
+    - `BaseBenchmark` ABC and `BenchmarkSuite` runner
+    - `LatencyBenchmark` measuring per-call latency (mean, p50, p95, min, max)
+    - `ThroughputBenchmark` measuring tokens-per-second throughput
+    - `BenchmarkResult` dataclass with JSONL export
+    - `jarvis bench run` CLI with options for model, engine, sample count,
+      benchmark selection, and JSON/JSONL output
+- **Docker deployment**
+    - `Dockerfile` -- Multi-stage Python 3.12-slim build with `[server]` extra
+    - `Dockerfile.gpu` -- NVIDIA CUDA 12.4 runtime variant
+    - `docker-compose.yml` -- Services for `jarvis` (port 8000) and `ollama`
+      (port 11434)
+    - `deploy/systemd/openjarvis.service` -- systemd unit file for Linux
+    - `deploy/launchd/com.openjarvis.plist` -- launchd plist for macOS
+- **Documentation site** -- MkDocs Material with mkdocstrings, covering
+  getting started, user guide, architecture, API reference, deployment, and
+  development
+
+---
+
+## v0.5.0
+
+*Phase 4 -- Learning, Telemetry, and Router Policies*
+
+### Added
+
+- **Learning system**
+    - `RouterPolicy` ABC and `RoutingContext` dataclass
+    - `RewardFunction` ABC for scoring inference results
+    - `HeuristicRewardFunction` scoring on latency, cost, and efficiency
+    - `RouterPolicyRegistry` for pluggable routing strategies
+    - `HeuristicRouter` registered as `"heuristic"` policy (6 priority rules:
+      code detection, math detection, short/long queries, urgency override,
+      default fallback)
+    - `TraceDrivenPolicy` registered as `"learned"` policy with batch updates
+      via `update_from_traces()` and online updates via `observe()`
+    - `GRPORouterPolicy` stub registered as `"grpo"` for future RL training
+    - `ensure_registered()` pattern for lazy, test-safe registration
+- **Telemetry aggregation**
+    - `TelemetryAggregator` with `per_model_stats()`, `per_engine_stats()`,
+      `top_models()`, `summary()`, `export_records()`, and `clear()` methods
+    - Time-range filtering via `since` / `until` parameters
+    - `ModelStats` and `EngineStats` dataclasses
+    - `AggregatedStats` summary dataclass
+- **CLI enhancements**
+    - `--router` flag on `jarvis ask` for explicit policy selection
+    - `jarvis telemetry stats` -- display aggregated telemetry statistics
+    - `jarvis telemetry export --format json|csv` -- export telemetry records
+    - `jarvis telemetry clear --yes` -- delete all telemetry records
+
+---
+
+## v0.4.0
+
+*Phase 3 -- Agents, Tools, and API Server*
+
+### Added
+
+- **Agent system**
+    - `BaseAgent` ABC with `run()` method returning `AgentResult`
+    - `AgentContext` dataclass with conversation, tools, and memory results
+    - `AgentResult` dataclass with content, tool results, turns, and metadata
+    - `AgentRegistry` for pluggable agent implementations
+    - `SimpleAgent` -- single-turn query-to-response, no tool calling
+    - `OrchestratorAgent` -- multi-turn tool-calling loop with `ToolExecutor`,
+      configurable `max_turns`
+    - `CustomAgent` -- template for user-defined agent behavior
+    - `OpenClawAgent` -- transport-based agent with tool-call loop and event
+      bus integration
+- **Tool system**
+    - `BaseTool` ABC with `spec` property and `execute()` method
+    - `ToolSpec` dataclass describing tool interface and characteristics
+    - `ToolExecutor` dispatch engine with JSON argument parsing, latency
+      tracking, and event bus integration (`TOOL_CALL_START` / `TOOL_CALL_END`)
+    - `ToolRegistry` for tool discovery
+    - `to_openai_function()` method for OpenAI function calling format
+    - Built-in tools:
+        - `CalculatorTool` -- safe math evaluation via AST parsing
+        - `ThinkTool` -- reasoning scratchpad for chain-of-thought
+        - `RetrievalTool` -- memory search integration
+        - `LLMTool` -- sub-model calls within agent loops
+        - `FileReadTool` -- safe file reading with path validation
+- **OpenAI-compatible API server** (`jarvis serve`)
+    - FastAPI + Uvicorn with optional `[server]` extra
+    - `POST /v1/chat/completions` -- non-streaming and SSE streaming
+    - `GET /v1/models` -- list available models
+    - `GET /health` -- health check endpoint
+    - Pydantic request/response models matching OpenAI API format
+
+---
+
+## v0.3.0
+
+*Phase 2 -- Memory System*
+
+### Added
+
+- **Memory backends**
+    - `MemoryBackend` ABC with `store()`, `retrieve()`, `delete()`, `clear()`
+    - `RetrievalResult` dataclass with content, score, source, and metadata
+    - `MemoryRegistry` for backend discovery
+    - `SQLiteMemory` -- zero-dependency default using SQLite FTS5 with BM25
+      ranking and FTS5 query escaping
+    - `FAISSMemory` -- vector search using FAISS with sentence-transformers
+      embeddings (optional `[memory-faiss]` extra)
+    - `ColBERTMemory` -- ColBERTv2 neural retrieval backend (optional
+      `[memory-colbert]` extra)
+    - `BM25Memory` -- BM25 ranking backend using rank-bm25 (optional
+      `[memory-bm25]` extra)
+    - `HybridMemory` -- Reciprocal Rank Fusion combining multiple backends
+- **Document processing**
+    - `ChunkConfig` dataclass for chunk size and overlap settings
+    - `chunk_text()` for splitting documents into overlapping chunks
+    - `ingest_path()` for recursively indexing files and directories
+    - `read_document()` with support for plain text, Markdown, and PDF
+      (optional `[memory-pdf]` extra)
+- **Context injection**
+    - `ContextConfig` with top-k, minimum score, and max context token settings
+    - `inject_context()` for prepending memory results as system messages with
+      source attribution
+    - `--no-context` flag on `jarvis ask` to disable injection
+- **CLI commands**
+    - `jarvis memory index <path>` -- index documents into memory
+    - `jarvis memory search <query>` -- search memory for relevant chunks
+    - `jarvis memory stats` -- show backend statistics
+- **Event bus integration** -- `MEMORY_STORE` and `MEMORY_RETRIEVE` events
+
+---
+
+## v0.2.0
+
+*Phase 1 -- Intelligence and Inference*
+
+### Added
+
+- **Intelligence pillar**
+    - `ModelSpec` dataclass with parameter count, context length, quantization,
+      VRAM requirements, and supported engines
+    - `ModelRegistry` for model metadata storage
+    - `BUILTIN_MODELS` catalog with pre-defined model specifications
+    - `register_builtin_models()` and `merge_discovered_models()` helpers
+    - `HeuristicRouter` with rule-based model selection
+    - `build_routing_context()` for query analysis (code detection, math
+      detection, length classification)
+- **Inference engines**
+    - `InferenceEngine` ABC with `generate()`, `stream()`, `list_models()`,
+      and `health()` methods
+    - `EngineRegistry` for engine discovery
+    - `OllamaEngine` -- Ollama backend via native HTTP API with tool call
+      extraction
+    - `VllmEngine` -- vLLM backend via OpenAI-compatible API
+    - `LlamaCppEngine` -- llama.cpp server backend
+    - `EngineConnectionError` for unreachable engines
+    - `messages_to_dicts()` for Message-to-OpenAI-format conversion
+- **Engine discovery**
+    - `discover_engines()` -- probe all registered engines for health
+    - `discover_models()` -- aggregate model lists across engines
+    - `get_engine()` -- get configured default with automatic fallback
+- **Hardware detection**
+    - NVIDIA GPU detection via `nvidia-smi`
+    - AMD GPU detection via `rocm-smi`
+    - Apple Silicon detection via `system_profiler`
+    - CPU brand detection via `/proc/cpuinfo` and `sysctl`
+    - `recommend_engine()` mapping hardware to best engine
+- **Telemetry**
+    - `TelemetryRecord` dataclass with timing, tokens, energy, and cost
+    - `TelemetryStore` with SQLite persistence and EventBus subscription
+    - `instrumented_generate()` wrapper for automatic telemetry recording
+- **CLI**
+    - `jarvis ask <query>` -- query via discovered engine
+    - `jarvis ask --agent simple <query>` -- route through SimpleAgent
+    - `jarvis model list` -- list models from running engines
+    - `jarvis model info <model>` -- show model details
+
+---
+
+## v0.1.0
+
+*Phase 0 -- Project Scaffolding*
+
+### Added
+
+- **Project structure** -- `hatchling` build backend, `uv` package manager,
+  `pyproject.toml` with extras for optional backends
+- **Registry system** -- `RegistryBase[T]` generic base class with
+  class-specific entry isolation, `register()` decorator, `get()`, `create()`,
+  `items()`, `keys()`, `contains()`, `clear()` methods
+- **Typed registries** -- `ModelRegistry`, `EngineRegistry`, `MemoryRegistry`,
+  `AgentRegistry`, `ToolRegistry`, `RouterPolicyRegistry`, `BenchmarkRegistry`
+- **Core types** -- `Role` enum, `Message`, `Conversation` (with sliding
+  window), `ModelSpec`, `Quantization` enum, `ToolCall`, `ToolResult`,
+  `TelemetryRecord`, `StepType` enum, `TraceStep`, `Trace`
+- **Configuration** -- `JarvisConfig` dataclass hierarchy, TOML loader with
+  overlay semantics, hardware auto-detection, `generate_default_toml()` for
+  `jarvis init`
+- **Event bus** -- Synchronous pub/sub `EventBus` with `EventType` enum for
+  inter-pillar communication
+- **CLI skeleton** -- Click-based `jarvis` command group with `--version`,
+  `--help`, and `init` subcommand
