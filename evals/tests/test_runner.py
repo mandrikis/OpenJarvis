@@ -373,6 +373,45 @@ class TestEvalRunner:
         assert "total_energy_joules" in data
 
 
+class TestRunnerTokenStats:
+    def test_summary_has_total_input_output_tokens(self, tmp_path):
+        """RunSummary should include total token counts."""
+        records = [
+            EvalRecord(record_id=f"r{i}", problem=f"q{i}", reference="a", category="test")
+            for i in range(3)
+        ]
+        output_path = tmp_path / "results.jsonl"
+        config = RunConfig(
+            benchmark="test", backend="mock", model="m",
+            max_workers=1, output_path=str(output_path),
+        )
+        dataset = MockDataset(records)
+        backend = MockBackend()
+        scorer = MockScorer(result=True)
+        runner = EvalRunner(config, dataset, backend, scorer)
+        summary = runner.run()
+        # MockBackend returns prompt_tokens=100, completion_tokens=50
+        assert summary.total_input_tokens == 300  # 3 * 100
+        assert summary.total_output_tokens == 150  # 3 * 50
+
+    def test_summary_has_avg_power(self, tmp_path):
+        """RunSummary should include avg_power_watts."""
+        records = [
+            EvalRecord(record_id="r1", problem="q", reference="a", category="test")
+        ]
+        output_path = tmp_path / "results.jsonl"
+        config = RunConfig(
+            benchmark="test", backend="mock", model="m",
+            max_workers=1, output_path=str(output_path),
+        )
+        dataset = MockDataset(records)
+        backend = MockBackend()  # returns power_watts=250.0
+        scorer = MockScorer(result=True)
+        runner = EvalRunner(config, dataset, backend, scorer)
+        summary = runner.run()
+        assert summary.avg_power_watts == 250.0
+
+
 class TestMetricStatsHelpers:
     def test_metric_stats_empty(self):
         assert _metric_stats([]) is None
@@ -401,4 +440,11 @@ class TestMetricStatsHelpers:
     def test_metric_stats_to_dict(self):
         ms = MetricStats(mean=1.0, median=2.0, min=0.5, max=3.0, std=0.8)
         d = _metric_stats_to_dict(ms)
-        assert d == {"mean": 1.0, "median": 2.0, "min": 0.5, "max": 3.0, "std": 0.8}
+        assert d["mean"] == 1.0
+        assert d["median"] == 2.0
+        assert d["min"] == 0.5
+        assert d["max"] == 3.0
+        assert d["std"] == 0.8
+        assert "p90" in d
+        assert "p95" in d
+        assert "p99" in d

@@ -343,6 +343,9 @@ class EvalRunner:
         ]
 
         total_energy = sum(r.energy_joules for r in results)
+        total_input_tokens = sum(r.prompt_tokens for r in results)
+        total_output_tokens = sum(r.completion_tokens for r in results)
+        avg_power = statistics.mean(power_vals) if power_vals else 0.0
 
         return RunSummary(
             benchmark=cfg.benchmark,
@@ -377,6 +380,9 @@ class EvalRunner:
             output_token_stats=_metric_stats([float(v) for v in output_tok_vals]),
             total_energy_joules=round(total_energy, 6),
             warmup_samples_excluded=cfg.warmup_samples,
+            avg_power_watts=round(avg_power, 4),
+            total_input_tokens=total_input_tokens,
+            total_output_tokens=total_output_tokens,
         )
 
 
@@ -464,6 +470,9 @@ def _summary_to_dict(s: RunSummary) -> Dict[str, Any]:
         "warmup_samples_excluded": s.warmup_samples_excluded,
         "steady_state_reached": s.steady_state_reached,
         "energy_method": s.energy_method,
+        "avg_power_watts": s.avg_power_watts,
+        "total_input_tokens": s.total_input_tokens,
+        "total_output_tokens": s.total_output_tokens,
     }
 
 

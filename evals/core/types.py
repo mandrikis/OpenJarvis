@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 
@@ -128,6 +129,9 @@ class RunSummary:
     total_input_tokens: int = 0
     total_output_tokens: int = 0
     trace_step_type_stats: Dict[str, Dict[str, float]] = field(default_factory=dict)
+    # Internal fields set by the runner after construction
+    _output_path: Optional[Path] = None
+    _traces_dir: Optional[Path] = None
 
 
 # ---------------------------------------------------------------------------
