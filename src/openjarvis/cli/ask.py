@@ -8,6 +8,7 @@ import sys
 import click
 from rich.console import Console
 
+from openjarvis.cli.hints import hint_no_engine
 from openjarvis.core.config import load_config
 from openjarvis.core.events import EventBus
 from openjarvis.core.types import Message, Role
@@ -268,6 +269,7 @@ def ask(
             )
         except EngineConnectionError as exc:
             console.print(f"[red]Engine error:[/red] {exc}")
+            console.print(hint_no_engine())
             sys.exit(1)
 
         if output_json:
