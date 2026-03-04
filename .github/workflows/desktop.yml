@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'desktop/**'
+      - 'frontend/**'
       - '.github/workflows/desktop.yml'
     tags:
       - 'desktop-v*'
@@ -12,6 +13,7 @@ on:
     branches: [main]
     paths:
       - 'desktop/**'
+      - 'frontend/**'
       - '.github/workflows/desktop.yml'
   workflow_dispatch:
 
@@ -46,16 +48,16 @@ jobs:
           node-version: '22'
 
       - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm install
+
+      - name: Install desktop dependencies
         working-directory: desktop
         run: npm install
 
       - name: TypeScript type-check
-        working-directory: desktop
+        working-directory: frontend
         run: npx tsc --noEmit
-
-      - name: Vite build
-        working-directory: desktop
-        run: npx vite build
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
@@ -64,6 +66,9 @@ jobs:
         uses: swatinem/rust-cache@v2
         with:
           workspaces: 'desktop/src-tauri -> target'
+
+      - name: Create frontend dist stub
+        run: mkdir -p frontend/dist && echo '<html><body></body></html>' > frontend/dist/index.html
 
       - name: Cargo check
         working-directory: desktop/src-tauri
@@ -117,8 +122,17 @@ jobs:
           node-version: '22'
 
       - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm install
+
+      - name: Install desktop dependencies
         working-directory: desktop
         run: npm install
+
+      - name: Download Ollama sidecar
+        shell: bash
+        run: |
+          cd desktop/scripts && chmod +x download-ollama.sh && ./download-ollama.sh
 
       - name: Determine release info
         id: release-info
@@ -163,6 +177,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          TAURI_CONFIG: '{"bundle":{"externalBin":["binaries/ollama"]}}'
         with:
           projectPath: desktop
           tauriScript: npx tauri

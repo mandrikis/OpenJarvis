@@ -45,7 +45,11 @@ class OllamaEngine(InferenceEngine):
             "model": model,
             "messages": messages_to_dicts(messages),
             "stream": False,
-            "options": {"temperature": temperature, "num_predict": max_tokens},
+            "options": {
+                "temperature": temperature,
+                "num_predict": max_tokens,
+                "num_ctx": kwargs.get("num_ctx", 8192),
+            },
         }
         # Pass tools if provided
         tools = kwargs.get("tools")
@@ -53,10 +57,19 @@ class OllamaEngine(InferenceEngine):
             payload["tools"] = tools
         try:
             resp = self._client.post("/api/chat", json=payload)
+            if resp.status_code == 400 and tools:
+                # Model may not support function calling -- retry without tools
+                payload.pop("tools", None)
+                resp = self._client.post("/api/chat", json=payload)
             resp.raise_for_status()
         except (httpx.ConnectError, httpx.TimeoutException) as exc:
             raise EngineConnectionError(
                 f"Ollama not reachable at {self._host}"
+            ) from exc
+        except httpx.HTTPStatusError as exc:
+            body = exc.response.text[:500] if exc.response else ""
+            raise RuntimeError(
+                f"Ollama returned {exc.response.status_code}: {body}"
             ) from exc
         data = resp.json()
         prompt_tokens = data.get("prompt_eval_count", 0)
@@ -102,7 +115,11 @@ class OllamaEngine(InferenceEngine):
             "model": model,
             "messages": messages_to_dicts(messages),
             "stream": True,
-            "options": {"temperature": temperature, "num_predict": max_tokens},
+            "options": {
+                "temperature": temperature,
+                "num_predict": max_tokens,
+                "num_ctx": kwargs.get("num_ctx", 8192),
+            },
         }
         try:
             with self._client.stream("POST", "/api/chat", json=payload) as resp:

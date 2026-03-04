@@ -5,10 +5,28 @@ description: Get up and running with OpenJarvis in minutes
 
 # Quick Start
 
-This guide walks through the core workflows of OpenJarvis: asking questions, using agents with tools, managing memory, running benchmarks, and starting the API server.
+This guide walks through the core workflows of OpenJarvis: the browser app, CLI, Python SDK, agents with tools, memory, benchmarks, and the API server.
 
 !!! info "Prerequisites"
     Make sure you have [installed OpenJarvis](installation.md) and have at least one inference backend running (e.g., `ollama serve`).
+
+## Browser App
+
+The quickest way to experience OpenJarvis is the full chat UI running in your browser:
+
+```bash
+git clone https://github.com/HazyResearch/OpenJarvis.git
+cd OpenJarvis
+./scripts/quickstart.sh
+```
+
+This launches the backend API server and a React frontend at [http://localhost:5173](http://localhost:5173).
+You get a ChatGPT-like interface with streaming responses, tool use, energy monitoring, and a telemetry dashboard — all running locally on your hardware.
+
+To stop all services, press ++ctrl+c++ in the terminal.
+
+!!! tip "Environment variable"
+    Set `OPENJARVIS_MODEL` to change the default model: `OPENJARVIS_MODEL=deepseek-r1:14b ./scripts/quickstart.sh`
 
 ## Initialize Configuration
 

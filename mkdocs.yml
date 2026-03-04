@@ -11,6 +11,9 @@ copyright: Copyright &copy; 2026 OpenJarvis Contributors
 theme:
   name: material
   language: en
+  font:
+    text: Merriweather
+    code: JetBrains Mono
   features:
     - navigation.tabs
     - navigation.tabs.sticky
@@ -27,20 +30,23 @@ theme:
   palette:
     - media: "(prefers-color-scheme: light)"
       scheme: default
-      primary: indigo
-      accent: amber
+      primary: custom
+      accent: blue
       toggle:
         icon: material/brightness-7
         name: Switch to dark mode
     - media: "(prefers-color-scheme: dark)"
       scheme: slate
-      primary: indigo
-      accent: amber
+      primary: custom
+      accent: blue
       toggle:
         icon: material/brightness-4
         name: Switch to light mode
   icon:
     repo: fontawesome/brands/github
+
+extra_css:
+  - stylesheets/extra.css
 
 plugins:
   - search
@@ -118,6 +124,7 @@ extra:
 
 nav:
   - Home: index.md
+  - Downloads: downloads.md
   - Getting Started:
       - Installation: getting-started/installation.md
       - Quick Start: getting-started/quickstart.md

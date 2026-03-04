@@ -7,15 +7,42 @@ description: Install OpenJarvis and set up an inference backend
 
 This guide covers installing OpenJarvis, its optional extras, and setting up an inference backend.
 
+## Quickstart (Recommended)
+
+The fastest way to get everything running — browser UI, backend, and inference engine — with a single command:
+
+```bash
+git clone https://github.com/HazyResearch/OpenJarvis.git
+cd OpenJarvis
+./scripts/quickstart.sh
+```
+
+This script checks for Python 3.10+, Node.js, and Ollama (installing what's missing), pulls a starter model, installs all dependencies, starts the backend and frontend servers, and opens the chat UI in your browser.
+
+!!! tip "Desktop app"
+    Prefer a native app? Download the [Desktop App](../downloads.md#desktop-app) instead — it bundles everything into a single installer.
+
+---
+
 ## Requirements
 
 | Requirement | Version | Notes |
 |-------------|---------|-------|
 | Python | 3.10+ | Required |
 | Inference backend | Any | At least one of Ollama, vLLM, llama.cpp, SGLang, or a cloud API |
-| Node.js | 22+ | Only required for OpenClaw agent infrastructure |
+| Node.js | 18+ | Required for the browser UI; 22+ for OpenClaw agent |
 
 ## Installing OpenJarvis
+
+=== "Quickstart script"
+
+    ```bash
+    git clone https://github.com/HazyResearch/OpenJarvis.git
+    cd OpenJarvis
+    ./scripts/quickstart.sh
+    ```
+
+    Handles everything: deps, Ollama, model pull, backend, frontend, browser open.
 
 === "uv (recommended)"
 

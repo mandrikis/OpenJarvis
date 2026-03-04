@@ -10,14 +10,13 @@ from typing import Any, Dict, List
 # ---------------------------------------------------------------------------
 
 CLOUD_PRICING: Dict[str, Dict[str, float]] = {
-    "gpt-5.2": {
-        "input_per_1m": 1.75,
-        "output_per_1m": 14.00,
-        "label": "GPT 5.2",
+    "gpt-5.3": {
+        "input_per_1m": 2.00,
+        "output_per_1m": 10.00,
+        "label": "GPT-5.3",
         "provider": "OpenAI",
-        # Rough estimates for energy/compute
-        "energy_wh_per_1k_tokens": 0.4,  # Wh per 1K tokens (datacenter)
-        "flops_per_token": 3.0e12,  # ~1.5T params * 2 (forward pass)
+        "energy_wh_per_1k_tokens": 0.4,
+        "flops_per_token": 3.0e12,
     },
     "claude-opus-4.6": {
         "input_per_1m": 5.00,

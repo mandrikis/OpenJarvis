@@ -63,3 +63,9 @@ desktop/src-tauri/target/
 
 # Rust
 target/
+
+# Claude plan artifacts
+docs/plans/
+
+# Tauri auto-generated schemas
+**/src-tauri/gen/schemas/

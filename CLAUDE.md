@@ -4,13 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Status
 
-OpenJarvis is a research framework for studying on-device AI systems. Phase 23 complete. Five composable pillars: Intelligence, Engine, Agents, Tools (with storage + MCP), and Learning — with trace-driven learning as a cross-cutting concern. ~3240 tests pass (~44 skipped for optional deps). Python SDK (`Jarvis` class), composition layer (`SystemBuilder`/`JarvisSystem`), eval framework (15 real benchmarks), composable recipes, agent templates, bundled skills, operator recipes, trace-driven learning pipeline, Docker deployment, Tauri desktop app, 40+ tools, 20+ CLI commands, 40+ API endpoints all ready.
+OpenJarvis is a research framework for studying on-device AI systems. Phase 24 complete. Five composable pillars: Intelligence, Engine, Agents, Tools (with storage + MCP), and Learning — with trace-driven learning as a cross-cutting concern. Speech subsystem (STT) with pluggable backends. ~3295 tests pass (~44 skipped for optional deps). Python SDK (`Jarvis` class), composition layer (`SystemBuilder`/`JarvisSystem`), eval framework (15 real benchmarks), composable recipes, agent templates, bundled skills, operator recipes, trace-driven learning pipeline, Docker deployment, Tauri desktop app, 40+ tools, 20+ CLI commands, 40+ API endpoints all ready.
 
 ## Build & Development Commands
 
 ```bash
 uv sync --extra dev          # Install deps + dev tools
-uv run pytest tests/ -v      # Run ~3241 tests (~44 skipped if optional deps missing)
+uv run pytest tests/ -v      # Run ~3295 tests (~44 skipped if optional deps missing)
 uv run ruff check src/ tests/ # Lint
 uv run jarvis --version      # 1.0.0
 uv run jarvis ask "Hello"    # Query via discovered engine (direct mode)
@@ -103,7 +103,7 @@ j.close()                             # Release resources
 ```
 
 - **Package manager:** `uv` with `hatchling` build backend
-- **Config:** `pyproject.toml` with extras for optional backends (e.g., `openjarvis[inference-vllm]`, `openjarvis[inference-mlx]`, `openjarvis[memory-colbert]`, `openjarvis[server]`, `openjarvis[openclaw]`, `openjarvis[energy-amd]`, `openjarvis[energy-apple]`, `openjarvis[energy-all]`, `openjarvis[security-signing]`, `openjarvis[sandbox-wasm]`, `openjarvis[dashboard]`, `openjarvis[browser]`, `openjarvis[media]`, `openjarvis[pdf]`, `openjarvis[channel-line]`, `openjarvis[channel-viber]`, `openjarvis[channel-reddit]`, `openjarvis[channel-mastodon]`, `openjarvis[channel-xmpp]`, `openjarvis[channel-rocketchat]`, `openjarvis[channel-zulip]`, `openjarvis[channel-twitch]`, `openjarvis[channel-nostr]`)
+- **Config:** `pyproject.toml` with extras for optional backends (e.g., `openjarvis[inference-vllm]`, `openjarvis[inference-mlx]`, `openjarvis[memory-colbert]`, `openjarvis[server]`, `openjarvis[openclaw]`, `openjarvis[energy-amd]`, `openjarvis[energy-apple]`, `openjarvis[energy-all]`, `openjarvis[security-signing]`, `openjarvis[sandbox-wasm]`, `openjarvis[dashboard]`, `openjarvis[browser]`, `openjarvis[media]`, `openjarvis[pdf]`, `openjarvis[channel-line]`, `openjarvis[channel-viber]`, `openjarvis[channel-reddit]`, `openjarvis[channel-mastodon]`, `openjarvis[channel-xmpp]`, `openjarvis[channel-rocketchat]`, `openjarvis[channel-zulip]`, `openjarvis[channel-twitch]`, `openjarvis[channel-nostr]`, `openjarvis[speech]`, `openjarvis[speech-deepgram]`)
 - **CLI entry point:** `jarvis` (Click-based) — subcommands: `init`, `ask`, `serve`, `start`, `stop`, `restart`, `status`, `chat`, `model`, `memory`, `telemetry`, `bench`, `eval`, `channel`, `scheduler`, `doctor`, `agent`, `workflow`, `skill`, `vault`, `add`
 - **Python:** 3.10+ required
 - **Node.js:** 22+ required only for OpenClaw agent
@@ -132,6 +132,10 @@ OpenJarvis is a research framework for on-device AI organized around **five comp
    - **`ToolExecutor`**: dispatch with RBAC check + taint check, `timeout_seconds` on `ToolSpec` (default 30s via `ThreadPoolExecutor`), event bus integration
    - All registered via `@ToolRegistry.register("name")` decorator
 5. **Learning** (`src/openjarvis/learning/`) — Structured learning with nested per-pillar sub-policies. `LearningConfig` sections: `routing` (heuristic/learned/grpo/bandit), `intelligence` (none/sft), `agent` (none/agent_advisor/icl_updater), `metrics` (accuracy/latency/cost/efficiency weights). Policies: `SFTRouterPolicy` (query→model from traces), `AgentAdvisorPolicy` (LM-guided), `ICLUpdaterPolicy` (in-context with example DB, versioning, rollback, quality gates), `GRPORouterPolicy` (softmax sampling, group relative advantage, per-query-class weights), `BanditRouterPolicy` (Thompson Sampling / UCB1, per-arm stats). `SkillDiscovery` mines tool subsequences from traces to auto-generate skill manifests. Router policies: `HeuristicRouter`, `TraceDrivenPolicy`. Orchestrator training subpackage provides SFT and GRPO pipelines. **Trace-driven learning pipeline**: `TrainingDataMiner` (extracts SFT pairs from traces with quality filters), `LoRATrainer` (LoRA fine-tuning with configurable rank/alpha, requires torch), `AgentConfigEvolver` (LM-guided agent config recommendations from trace patterns), `LearningOrchestrator` (wired into `SystemBuilder`, orchestrates mine→train→evolve cycle on schedule).
+
+### Speech Subsystem
+
+- **Speech** (`src/openjarvis/speech/`) — Speech-to-text with pluggable backends. `SpeechBackend` ABC (`transcribe()`, `health()`, `supported_formats()`). `TranscriptionResult` + `Segment` dataclasses. Backends: `FasterWhisperBackend` (local, CTranslate2, key `"faster-whisper"`), `OpenAIWhisperBackend` (cloud, `whisper-1`, key `"openai"`), `DeepgramSpeechBackend` (cloud, `nova-2`, key `"deepgram"`). Auto-discovery with local-first priority. `SpeechConfig` in `JarvisConfig`. `SpeechRegistry` for backend registration. Wired into `SystemBuilder.speech()`, `create_app()`, `jarvis serve`. API: `POST /v1/speech/transcribe` (multipart), `GET /v1/speech/health`. Frontend: `useSpeech` hook + `MicButton` component. Tauri: `transcribe_audio` + `speech_health` commands. Optional deps: `openjarvis[speech]` (faster-whisper), `openjarvis[speech-deepgram]` (deepgram-sdk).
 
 ### Cross-cutting Systems
 
@@ -194,6 +198,7 @@ OpenAI-compatible server via `jarvis serve`:
 - **Telemetry**: `GET /v1/telemetry/stats`, `GET /v1/telemetry/energy`
 - **Learning**: `GET /v1/learning/stats`, `GET /v1/learning/policy`
 - **Skills**: `GET /v1/skills`, `POST /v1/skills`, `DELETE /v1/skills/{name}`
+- **Speech**: `POST /v1/speech/transcribe`, `GET /v1/speech/health`
 - **Sessions**: `GET /v1/sessions`, `GET /v1/sessions/{id}`
 - **Budget**: `GET /v1/budget`, `PUT /v1/budget/limits`
 - **Metrics**: `GET /metrics` (Prometheus-compatible)
@@ -238,3 +243,4 @@ OpenAI-compatible server via `jarvis serve`:
 | v2.6 | 21 | 10 new channels: LINE, Viber, Messenger, Reddit, Mastodon, XMPP, Rocket.Chat, Zulip, Twitch, Nostr |
 | v2.7 | 22 | Operators: persistent, scheduled autonomous agents with recipe + schedule + channel output |
 | v2.8 | 23 | Differentiated functionalities: trace-driven learning pipeline (TrainingDataMiner, LoRATrainer, AgentConfigEvolver, LearningOrchestrator), 15 real IPW benchmarks, composable recipes, 15 agent templates, 20 bundled skills, 3 operator recipes |
+| v2.9 | 24 | Speech subsystem: SpeechBackend ABC, SpeechRegistry, 3 backends (FasterWhisper local, OpenAI cloud, Deepgram cloud), auto-discovery, API endpoints, frontend MicButton + useSpeech hook, Tauri commands, SystemBuilder wiring |

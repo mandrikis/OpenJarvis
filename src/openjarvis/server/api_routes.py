@@ -198,9 +198,26 @@ telemetry_router = APIRouter(prefix="/v1/telemetry", tags=["telemetry"])
 async def telemetry_stats(request: Request):
     """Get aggregated telemetry statistics."""
     try:
+        from dataclasses import asdict
+
+        from openjarvis.core.config import DEFAULT_CONFIG_DIR
         from openjarvis.telemetry.aggregator import TelemetryAggregator
-        agg = TelemetryAggregator()
-        return agg.summary()
+
+        db_path = DEFAULT_CONFIG_DIR / "telemetry.db"
+        if not db_path.exists():
+            return {"total_requests": 0, "total_tokens": 0}
+
+        session_start = getattr(request.app.state, "session_start", None)
+        agg = TelemetryAggregator(db_path)
+        try:
+            stats = agg.summary(since=session_start)
+            d = asdict(stats)
+            d.pop("per_model", None)
+            d.pop("per_engine", None)
+            d["total_requests"] = d.pop("total_calls", 0)
+            return d
+        finally:
+            agg.close()
     except Exception as exc:
         return {"error": str(exc)}
 
@@ -208,9 +225,33 @@ async def telemetry_stats(request: Request):
 async def telemetry_energy(request: Request):
     """Get energy monitoring data."""
     try:
+        from dataclasses import asdict
+
+        from openjarvis.core.config import DEFAULT_CONFIG_DIR
         from openjarvis.telemetry.aggregator import TelemetryAggregator
-        agg = TelemetryAggregator()
-        return agg.energy_summary()
+
+        db_path = DEFAULT_CONFIG_DIR / "telemetry.db"
+        if not db_path.exists():
+            return {"total_energy_j": 0, "energy_per_token_j": 0, "avg_power_w": 0}
+
+        session_start = getattr(request.app.state, "session_start", None)
+        agg = TelemetryAggregator(db_path)
+        try:
+            stats = agg.summary(since=session_start)
+            total_energy = stats.total_energy_joules
+            total_tokens = stats.total_tokens
+            total_latency = stats.total_latency
+            return {
+                "total_energy_j": total_energy,
+                "energy_per_token_j": (
+                    total_energy / total_tokens if total_tokens > 0 else 0
+                ),
+                "avg_power_w": (
+                    total_energy / total_latency if total_latency > 0 else 0
+                ),
+            }
+        finally:
+            agg.close()
     except Exception as exc:
         return {"error": str(exc)}
 
@@ -319,8 +360,15 @@ metrics_router = APIRouter(tags=["metrics"])
 async def prometheus_metrics(request: Request):
     """Prometheus-compatible metrics endpoint."""
     try:
+        from openjarvis.core.config import DEFAULT_CONFIG_DIR
         from openjarvis.telemetry.aggregator import TelemetryAggregator
-        agg = TelemetryAggregator()
+
+        db_path = DEFAULT_CONFIG_DIR / "telemetry.db"
+        if not db_path.exists():
+            from starlette.responses import PlainTextResponse
+            return PlainTextResponse("# no telemetry data\n", media_type="text/plain")
+
+        agg = TelemetryAggregator(db_path)
         stats = agg.summary()
 
         lines = [
@@ -570,6 +618,51 @@ async def learning_policy(request: Request):
     return result
 
 
+# ---- Speech routes ----
+
+speech_router = APIRouter(prefix="/v1/speech", tags=["speech"])
+
+
+@speech_router.post("/transcribe")
+async def transcribe_speech(request: Request):
+    """Transcribe uploaded audio to text."""
+    backend = getattr(request.app.state, "speech_backend", None)
+    if backend is None:
+        raise HTTPException(status_code=501, detail="Speech backend not configured")
+
+    form = await request.form()
+    audio_file = form.get("file")
+    if audio_file is None:
+        raise HTTPException(status_code=400, detail="Missing 'file' field")
+
+    audio_bytes = await audio_file.read()
+    language = form.get("language")
+
+    # Detect format from filename
+    filename = getattr(audio_file, "filename", "audio.wav")
+    ext = filename.rsplit(".", 1)[-1] if "." in filename else "wav"
+
+    result = backend.transcribe(audio_bytes, format=ext, language=language or None)
+    return {
+        "text": result.text,
+        "language": result.language,
+        "confidence": result.confidence,
+        "duration_seconds": result.duration_seconds,
+    }
+
+
+@speech_router.get("/health")
+async def speech_health(request: Request):
+    """Check if a speech backend is available."""
+    backend = getattr(request.app.state, "speech_backend", None)
+    if backend is None:
+        return {"available": False, "reason": "No speech backend configured"}
+    return {
+        "available": backend.health(),
+        "backend": backend.backend_id,
+    }
+
+
 def include_all_routes(app) -> None:
     """Include all extended API routers in a FastAPI app."""
     app.include_router(agents_router)
@@ -582,6 +675,7 @@ def include_all_routes(app) -> None:
     app.include_router(metrics_router)
     app.include_router(websocket_router)
     app.include_router(learning_router)
+    app.include_router(speech_router)
 
 
 __all__ = [
@@ -596,4 +690,5 @@ __all__ = [
     "metrics_router",
     "websocket_router",
     "learning_router",
+    "speech_router",
 ]

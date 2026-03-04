@@ -100,25 +100,39 @@ def create_energy_monitor(
 
     Returns ``None`` if no energy monitoring is available.
     """
-    # Build ordered candidate list
-    from openjarvis.telemetry.energy_amd import AmdEnergyMonitor
-    from openjarvis.telemetry.energy_apple import AppleEnergyMonitor
-    from openjarvis.telemetry.energy_nvidia import NvidiaEnergyMonitor
-    from openjarvis.telemetry.energy_rapl import RaplEnergyMonitor
+    # Build ordered candidate list — imports are defensive because vendor
+    # packages (amdsmi, pynvml) may be installed but non-functional on the
+    # current platform (e.g. amdsmi on macOS).
+    vendor_map: dict[str, type[EnergyMonitor]] = {}
+    default_order: list[type[EnergyMonitor]] = []
 
-    vendor_map = {
-        "nvidia": NvidiaEnergyMonitor,
-        "amd": AmdEnergyMonitor,
-        "apple": AppleEnergyMonitor,
-        "cpu_rapl": RaplEnergyMonitor,
-    }
+    try:
+        from openjarvis.telemetry.energy_nvidia import NvidiaEnergyMonitor
+        vendor_map["nvidia"] = NvidiaEnergyMonitor
+        default_order.append(NvidiaEnergyMonitor)
+    except Exception:
+        pass
 
-    default_order = [
-        NvidiaEnergyMonitor,
-        AmdEnergyMonitor,
-        AppleEnergyMonitor,
-        RaplEnergyMonitor,
-    ]
+    try:
+        from openjarvis.telemetry.energy_amd import AmdEnergyMonitor
+        vendor_map["amd"] = AmdEnergyMonitor
+        default_order.append(AmdEnergyMonitor)
+    except Exception:
+        pass
+
+    try:
+        from openjarvis.telemetry.energy_apple import AppleEnergyMonitor
+        vendor_map["apple"] = AppleEnergyMonitor
+        default_order.append(AppleEnergyMonitor)
+    except Exception:
+        pass
+
+    try:
+        from openjarvis.telemetry.energy_rapl import RaplEnergyMonitor
+        vendor_map["cpu_rapl"] = RaplEnergyMonitor
+        default_order.append(RaplEnergyMonitor)
+    except Exception:
+        pass
 
     if prefer_vendor and prefer_vendor.lower() in vendor_map:
         preferred_cls = vendor_map[prefer_vendor.lower()]

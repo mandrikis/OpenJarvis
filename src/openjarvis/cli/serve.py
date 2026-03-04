@@ -70,9 +70,13 @@ def serve(
     telem_store = None
     if config.telemetry.enabled:
         try:
+            from pathlib import Path
+
             from openjarvis.telemetry.store import TelemetryStore
 
-            telem_store = TelemetryStore(config.telemetry.db_path)
+            db_path = Path(config.telemetry.db_path).expanduser()
+            db_path.parent.mkdir(parents=True, exist_ok=True)
+            telem_store = TelemetryStore(str(db_path))
             telem_store.subscribe_to_bus(bus)
         except Exception:
             pass  # telemetry is best-effort
@@ -86,6 +90,27 @@ def serve(
         sys.exit(1)
 
     engine_name, engine = resolved
+
+    # Wrap engine with InstrumentedEngine for telemetry recording
+    try:
+        from openjarvis.telemetry.instrumented_engine import InstrumentedEngine
+
+        energy_mon = None
+        try:
+            from openjarvis.telemetry.energy_monitor import create_energy_monitor
+
+            energy_mon = create_energy_monitor()
+            if energy_mon is not None:
+                console.print(
+                    f"  Energy: [cyan]{energy_mon.vendor().value}[/cyan] "
+                    f"({energy_mon.energy_method()})"
+                )
+        except Exception:
+            pass
+
+        engine = InstrumentedEngine(engine, bus, energy_monitor=energy_mon)
+    except Exception:
+        pass  # instrumentation is best-effort
 
     # Discover models
     all_engines = discover_engines(config)
@@ -160,6 +185,16 @@ def serve(
             console.print(f"[yellow]Channel failed to start: {exc}[/yellow]")
             channel_bridge = None
 
+    # Set up speech backend
+    speech_backend = None
+    try:
+        from openjarvis.speech._discovery import get_speech_backend
+        speech_backend = get_speech_backend(config)
+        if speech_backend:
+            console.print(f"  Speech: [cyan]{speech_backend.backend_id}[/cyan]")
+    except Exception:
+        pass
+
     # Create app
     from openjarvis.server.app import create_app
 
@@ -167,6 +202,7 @@ def serve(
         engine, model_name, agent=agent, bus=bus,
         engine_name=engine_name, agent_name=agent_key or "",
         channel_bridge=channel_bridge, config=config,
+        speech_backend=speech_backend,
     )
 
     console.print(

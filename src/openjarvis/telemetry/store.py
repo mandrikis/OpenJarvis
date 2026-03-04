@@ -180,7 +180,10 @@ class TelemetryStore:
     def _on_event(self, event: Event) -> None:
         rec = event.data.get("record")
         if isinstance(rec, TelemetryRecord):
-            self.record(rec)
+            try:
+                self.record(rec)
+            except Exception:
+                pass
 
     def close(self) -> None:
         """Close the underlying SQLite connection."""

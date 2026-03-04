@@ -137,6 +137,10 @@ class SkillRegistry(RegistryBase[Any]):
     """Registry for skill manifests."""
 
 
+class SpeechRegistry(RegistryBase[Any]):
+    """Registry for speech backend implementations."""
+
+
 __all__ = [
     "AgentRegistry",
     "BenchmarkRegistry",
@@ -148,5 +152,6 @@ __all__ = [
     "RegistryBase",
     "RouterPolicyRegistry",
     "SkillRegistry",
+    "SpeechRegistry",
     "ToolRegistry",
 ]

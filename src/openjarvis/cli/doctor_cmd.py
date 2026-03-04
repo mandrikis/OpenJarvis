@@ -222,7 +222,7 @@ def _check_optional_deps() -> List[CheckResult]:
         try:
             __import__(pkg)
             results.append(CheckResult(f"Optional: {label}", "ok", "Installed"))
-        except ImportError:
+        except Exception:
             results.append(
                 CheckResult(f"Optional: {label}", "warn", "Not installed")
             )

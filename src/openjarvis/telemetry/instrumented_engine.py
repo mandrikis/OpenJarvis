@@ -181,11 +181,13 @@ class InstrumentedEngine(InferenceEngine):
 
         engine_id = getattr(self._inner, "engine_id", "unknown")
 
+        prompt_tok = usage.get("prompt_tokens", 0)
         record = TelemetryRecord(
             timestamp=t0,
             model_id=model,
-            prompt_tokens=usage.get("prompt_tokens", 0),
+            prompt_tokens=prompt_tok,
             completion_tokens=completion_tokens,
+            total_tokens=prompt_tok + completion_tokens,
             latency_seconds=latency,
             ttft=ttft,
             throughput_tok_per_sec=throughput,
