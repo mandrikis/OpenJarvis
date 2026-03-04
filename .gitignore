@@ -60,3 +60,9 @@ desktop/src-tauri/target/
 
 # Worktrees
 .worktrees/
+
+# Claude plan artifacts
+docs/plans/
+
+# Tauri auto-generated schemas
+**/src-tauri/gen/schemas/

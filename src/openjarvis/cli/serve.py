@@ -74,7 +74,7 @@ def serve(
 
             from openjarvis.telemetry.store import TelemetryStore
 
-            db_path = Path(config.telemetry.db_path)
+            db_path = Path(config.telemetry.db_path).expanduser()
             db_path.parent.mkdir(parents=True, exist_ok=True)
             telem_store = TelemetryStore(str(db_path))
             telem_store.subscribe_to_bus(bus)
