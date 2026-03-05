@@ -34,6 +34,27 @@ processing happens on your local machine — the app connects to the backend you
 !!! tip "All releases"
     Browse all versions on the [GitHub Releases](https://github.com/HazyResearch/OpenJarvis/releases) page.
 
+### macOS: "app is damaged" fix
+
+macOS Gatekeeper quarantines apps downloaded from the internet that aren't notarized
+by Apple. If you see **"OpenJarvis is damaged and can't be opened"**, run this in
+Terminal to clear the quarantine flag:
+
+```bash
+xattr -cr /Applications/OpenJarvis.app
+```
+
+Then open the app normally. If you installed from the DMG but haven't moved it to
+`/Applications` yet, point the command at wherever the `.app` bundle is:
+
+```bash
+xattr -cr ~/Downloads/OpenJarvis.app
+```
+
+!!! note
+    This is standard for open-source macOS apps distributed outside the App Store.
+    The command removes the quarantine extended attribute — it does not modify the app.
+
 ### What's included
 
 The desktop app provides:

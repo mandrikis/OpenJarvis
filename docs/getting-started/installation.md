@@ -95,6 +95,13 @@ cd OpenJarvis
 
 The app connects to `http://localhost:8000` automatically.
 
+!!! warning "macOS: \"app is damaged\""
+    If macOS says the app is damaged, clear the Gatekeeper quarantine flag:
+    ```bash
+    xattr -cr /Applications/OpenJarvis.app
+    ```
+    This is normal for open-source apps distributed outside the App Store.
+
 !!! tip "All releases"
     Browse all versions on the [GitHub Releases](https://github.com/HazyResearch/OpenJarvis/releases) page.
 

@@ -53,6 +53,8 @@ Everything runs on your hardware. Cloud APIs are optional.
 
     The app connects to `http://localhost:8000` automatically.
 
+    !!! warning "macOS: run `xattr -cr /Applications/OpenJarvis.app` if the app shows as \"damaged\"."
+
 === "Python SDK"
 
     ```python
