@@ -257,6 +257,35 @@ class LMStudioEngineConfig:
     host: str = "http://localhost:1234"
 
 
+@dataclass(slots=True)
+class ExoEngineConfig:
+    """Per-engine config for Exo."""
+
+    host: str = "http://localhost:52415"
+
+
+@dataclass(slots=True)
+class NexaEngineConfig:
+    """Per-engine config for Nexa."""
+
+    host: str = "http://localhost:18181"
+    device: str = ""
+
+
+@dataclass(slots=True)
+class UzuEngineConfig:
+    """Per-engine config for Uzu."""
+
+    host: str = "http://localhost:8080"
+
+
+@dataclass(slots=True)
+class AppleFmEngineConfig:
+    """Per-engine config for Apple Foundation Models."""
+
+    host: str = "http://localhost:8079"
+
+
 @dataclass
 class EngineConfig:
     """Inference engine settings with nested per-engine configs."""
@@ -268,6 +297,10 @@ class EngineConfig:
     llamacpp: LlamaCppEngineConfig = field(default_factory=LlamaCppEngineConfig)
     mlx: MLXEngineConfig = field(default_factory=MLXEngineConfig)
     lmstudio: LMStudioEngineConfig = field(default_factory=LMStudioEngineConfig)
+    exo: ExoEngineConfig = field(default_factory=ExoEngineConfig)
+    nexa: NexaEngineConfig = field(default_factory=NexaEngineConfig)
+    uzu: UzuEngineConfig = field(default_factory=UzuEngineConfig)
+    apple_fm: AppleFmEngineConfig = field(default_factory=AppleFmEngineConfig)
 
     # Backward-compat properties for old flat attribute names
     @property
@@ -332,6 +365,42 @@ class EngineConfig:
     @lmstudio_host.setter
     def lmstudio_host(self, value: str) -> None:
         self.lmstudio.host = value
+
+    @property
+    def exo_host(self) -> str:
+        """Deprecated: use ``engine.exo.host``."""
+        return self.exo.host
+
+    @exo_host.setter
+    def exo_host(self, value: str) -> None:
+        self.exo.host = value
+
+    @property
+    def nexa_host(self) -> str:
+        """Deprecated: use ``engine.nexa.host``."""
+        return self.nexa.host
+
+    @nexa_host.setter
+    def nexa_host(self, value: str) -> None:
+        self.nexa.host = value
+
+    @property
+    def uzu_host(self) -> str:
+        """Deprecated: use ``engine.uzu.host``."""
+        return self.uzu.host
+
+    @uzu_host.setter
+    def uzu_host(self, value: str) -> None:
+        self.uzu.host = value
+
+    @property
+    def apple_fm_host(self) -> str:
+        """Deprecated: use ``engine.apple_fm.host``."""
+        return self.apple_fm.host
+
+    @apple_fm_host.setter
+    def apple_fm_host(self, value: str) -> None:
+        self.apple_fm.host = value
 
 
 @dataclass(slots=True)
@@ -1027,6 +1096,19 @@ host = "http://localhost:8080"
 
 # [engine.lmstudio]
 # host = "http://localhost:1234"
+
+# [engine.exo]
+# host = "http://localhost:52415"
+
+# [engine.nexa]
+# host = "http://localhost:18181"
+# device = ""  # cpu, gpu, npu
+
+# [engine.uzu]
+# host = "http://localhost:8080"
+
+# [engine.apple_fm]
+# host = "http://localhost:8079"
 
 [intelligence]
 default_model = ""

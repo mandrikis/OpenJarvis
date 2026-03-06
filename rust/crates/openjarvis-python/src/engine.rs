@@ -12,7 +12,8 @@ pub struct PyEngine {
 
 #[pymethods]
 impl PyEngine {
-    /// Create an engine by key (e.g. "ollama", "vllm", "sglang", "llamacpp", "mlx", "lmstudio").
+    /// Create an engine by key (e.g. "ollama", "vllm", "sglang", "llamacpp",
+    /// "mlx", "lmstudio", "exo", "nexa", "uzu", "apple_fm").
     #[new]
     #[pyo3(signature = (engine_key="ollama", host=None))]
     fn new(engine_key: &str, host: Option<&str>) -> PyResult<Self> {
@@ -46,6 +47,26 @@ impl PyEngine {
             "lmstudio" => openjarvis_engine::Engine::LmStudio(
                 openjarvis_engine::OpenAICompatEngine::lmstudio(
                     host.unwrap_or("http://localhost:1234"),
+                ),
+            ),
+            "exo" => openjarvis_engine::Engine::Exo(
+                openjarvis_engine::OpenAICompatEngine::exo(
+                    host.unwrap_or("http://localhost:52415"),
+                ),
+            ),
+            "nexa" => openjarvis_engine::Engine::Nexa(
+                openjarvis_engine::OpenAICompatEngine::nexa(
+                    host.unwrap_or("http://localhost:18181"),
+                ),
+            ),
+            "uzu" => openjarvis_engine::Engine::Uzu(
+                openjarvis_engine::OpenAICompatEngine::uzu(
+                    host.unwrap_or("http://localhost:8080"),
+                ),
+            ),
+            "apple_fm" => openjarvis_engine::Engine::AppleFm(
+                openjarvis_engine::OpenAICompatEngine::apple_fm(
+                    host.unwrap_or("http://localhost:8079"),
                 ),
             ),
             other => {

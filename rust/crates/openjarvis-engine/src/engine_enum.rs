@@ -20,6 +20,10 @@ pub enum Engine {
     LlamaCpp(OpenAICompatEngine),
     Mlx(OpenAICompatEngine),
     LmStudio(OpenAICompatEngine),
+    Exo(OpenAICompatEngine),
+    Nexa(OpenAICompatEngine),
+    Uzu(OpenAICompatEngine),
+    AppleFm(OpenAICompatEngine),
 }
 
 macro_rules! delegate_engine {
@@ -31,6 +35,10 @@ macro_rules! delegate_engine {
             Engine::LlamaCpp(e) => e.$method($($arg),*),
             Engine::Mlx(e) => e.$method($($arg),*),
             Engine::LmStudio(e) => e.$method($($arg),*),
+            Engine::Exo(e) => e.$method($($arg),*),
+            Engine::Nexa(e) => e.$method($($arg),*),
+            Engine::Uzu(e) => e.$method($($arg),*),
+            Engine::AppleFm(e) => e.$method($($arg),*),
         }
     };
 }
@@ -67,6 +75,10 @@ impl InferenceEngine for Engine {
             Engine::LlamaCpp(e) => e.stream(messages, model, temperature, max_tokens, extra).await,
             Engine::Mlx(e) => e.stream(messages, model, temperature, max_tokens, extra).await,
             Engine::LmStudio(e) => e.stream(messages, model, temperature, max_tokens, extra).await,
+            Engine::Exo(e) => e.stream(messages, model, temperature, max_tokens, extra).await,
+            Engine::Nexa(e) => e.stream(messages, model, temperature, max_tokens, extra).await,
+            Engine::Uzu(e) => e.stream(messages, model, temperature, max_tokens, extra).await,
+            Engine::AppleFm(e) => e.stream(messages, model, temperature, max_tokens, extra).await,
         }
     }
 
@@ -97,6 +109,10 @@ impl Engine {
             Engine::LlamaCpp(_) => "llamacpp",
             Engine::Mlx(_) => "mlx",
             Engine::LmStudio(_) => "lmstudio",
+            Engine::Exo(_) => "exo",
+            Engine::Nexa(_) => "nexa",
+            Engine::Uzu(_) => "uzu",
+            Engine::AppleFm(_) => "apple_fm",
         }
     }
 }
@@ -117,5 +133,33 @@ mod tests {
         let e = Engine::Vllm(OpenAICompatEngine::vllm("http://localhost:8000"));
         assert_eq!(e.variant_key(), "vllm");
         assert_eq!(e.engine_id(), "vllm");
+    }
+
+    #[test]
+    fn test_engine_exo_variant() {
+        let e = Engine::Exo(OpenAICompatEngine::exo("http://localhost:52415"));
+        assert_eq!(e.variant_key(), "exo");
+        assert_eq!(e.engine_id(), "exo");
+    }
+
+    #[test]
+    fn test_engine_nexa_variant() {
+        let e = Engine::Nexa(OpenAICompatEngine::nexa("http://localhost:18181"));
+        assert_eq!(e.variant_key(), "nexa");
+        assert_eq!(e.engine_id(), "nexa");
+    }
+
+    #[test]
+    fn test_engine_uzu_variant() {
+        let e = Engine::Uzu(OpenAICompatEngine::uzu("http://localhost:8080"));
+        assert_eq!(e.variant_key(), "uzu");
+        assert_eq!(e.engine_id(), "uzu");
+    }
+
+    #[test]
+    fn test_engine_apple_fm_variant() {
+        let e = Engine::AppleFm(OpenAICompatEngine::apple_fm("http://localhost:8079"));
+        assert_eq!(e.variant_key(), "apple_fm");
+        assert_eq!(e.engine_id(), "apple_fm");
     }
 }

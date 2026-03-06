@@ -55,6 +55,16 @@ try:
 except ImportError:
     pass
 
+try:
+    import openjarvis.agents.monitor  # noqa: F401
+except ImportError:
+    pass
+
+try:
+    import openjarvis.agents.monitor_operative  # noqa: F401
+except ImportError:
+    pass
+
 # Registry alias: "react" -> NativeReActAgent (for backward compat)
 try:
     from openjarvis.core.registry import AgentRegistry

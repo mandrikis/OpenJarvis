@@ -352,6 +352,7 @@ class TestDefaultSearchSpace:
         expected = {
             "ollama", "vllm", "sglang",
             "llamacpp", "mlx", "lmstudio",
+            "exo", "nexa", "uzu", "apple_fm",
         }
         assert set(dim.values) == expected
 

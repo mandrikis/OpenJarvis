@@ -124,7 +124,11 @@ DEFAULT_SEARCH_SPACE = SearchSpace(
         SearchDimension(
             name="engine.backend",
             dim_type="categorical",
-            values=["ollama", "vllm", "sglang", "llamacpp", "mlx", "lmstudio"],
+            values=[
+                "ollama", "vllm", "sglang", "llamacpp",
+                "mlx", "lmstudio", "exo", "nexa",
+                "uzu", "apple_fm",
+            ],
             description="Inference engine backend",
             pillar="engine",
         ),

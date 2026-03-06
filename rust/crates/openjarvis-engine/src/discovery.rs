@@ -38,6 +38,10 @@ pub fn discover_engines(config: &JarvisConfig) -> Vec<EngineInfo> {
         ("llamacpp", &config.engine.llamacpp.host),
         ("mlx", &config.engine.mlx.host),
         ("lmstudio", &config.engine.lmstudio.host),
+        ("exo", &config.engine.exo.host),
+        ("nexa", &config.engine.nexa.host),
+        ("uzu", &config.engine.uzu.host),
+        ("apple_fm", &config.engine.apple_fm.host),
     ];
 
     for (name, host) in compat_engines {
@@ -94,6 +98,18 @@ pub fn get_engine_static(
         ))),
         "lmstudio" => Ok(Engine::LmStudio(OpenAICompatEngine::lmstudio(
             &config.engine.lmstudio.host,
+        ))),
+        "exo" => Ok(Engine::Exo(OpenAICompatEngine::exo(
+            &config.engine.exo.host,
+        ))),
+        "nexa" => Ok(Engine::Nexa(OpenAICompatEngine::nexa(
+            &config.engine.nexa.host,
+        ))),
+        "uzu" => Ok(Engine::Uzu(OpenAICompatEngine::uzu(
+            &config.engine.uzu.host,
+        ))),
+        "apple_fm" => Ok(Engine::AppleFm(OpenAICompatEngine::apple_fm(
+            &config.engine.apple_fm.host,
         ))),
         other => Err(OpenJarvisError::Engine(
             openjarvis_core::error::EngineError::ModelNotFound(format!(

@@ -49,6 +49,31 @@ BENCHMARKS = {
         "category": "agentic",
         "description": "TerminalBench Native (Docker)",
     },
+    "loghub": {"category": "agentic", "description": "LogHub log anomaly detection"},
+    "ama-bench": {
+        "category": "agentic",
+        "description": "AMA-Bench agent memory assessment",
+    },
+    "lifelong-agent": {
+        "category": "agentic",
+        "description": "LifelongAgentBench sequential task learning",
+    },
+    "deepplanning": {
+        "category": "agentic",
+        "description": "DeepPlanning shopping constraints",
+    },
+    "paperarena": {
+        "category": "agentic",
+        "description": "PaperArena paper analysis",
+    },
+    "webchorearena": {
+        "category": "agentic",
+        "description": "WebChoreArena web chore tasks",
+    },
+    "workarena": {
+        "category": "agentic",
+        "description": "WorkArena++ enterprise workflows",
+    },
 }
 
 BACKENDS = {
@@ -137,6 +162,27 @@ def _build_dataset(benchmark: str):
             TerminalBenchNativeDataset,
         )
         return TerminalBenchNativeDataset()
+    elif benchmark == "loghub":
+        from openjarvis.evals.datasets.loghub import LogHubDataset
+        return LogHubDataset()
+    elif benchmark == "ama-bench":
+        from openjarvis.evals.datasets.ama_bench import AMABenchDataset
+        return AMABenchDataset()
+    elif benchmark == "lifelong-agent":
+        from openjarvis.evals.datasets.lifelong_agent import LifelongAgentDataset
+        return LifelongAgentDataset()
+    elif benchmark == "deepplanning":
+        from openjarvis.evals.datasets.deepplanning import DeepPlanningDataset
+        return DeepPlanningDataset()
+    elif benchmark == "paperarena":
+        from openjarvis.evals.datasets.paperarena import PaperArenaDataset
+        return PaperArenaDataset()
+    elif benchmark == "webchorearena":
+        from openjarvis.evals.datasets.webchorearena import WebChoreArenaDataset
+        return WebChoreArenaDataset()
+    elif benchmark == "workarena":
+        from openjarvis.evals.datasets.workarena import WorkArenaDataset
+        return WorkArenaDataset()
     else:
         raise click.ClickException(f"Unknown benchmark: {benchmark}")
 
@@ -187,6 +233,27 @@ def _build_scorer(benchmark: str, judge_backend, judge_model: str):
             TerminalBenchNativeScorer,
         )
         return TerminalBenchNativeScorer(judge_backend, judge_model)
+    elif benchmark == "loghub":
+        from openjarvis.evals.scorers.loghub_scorer import LogHubScorer
+        return LogHubScorer(judge_backend, judge_model)
+    elif benchmark == "ama-bench":
+        from openjarvis.evals.scorers.ama_bench_judge import AMABenchScorer
+        return AMABenchScorer(judge_backend, judge_model)
+    elif benchmark == "lifelong-agent":
+        from openjarvis.evals.scorers.lifelong_agent_scorer import LifelongAgentScorer
+        return LifelongAgentScorer(judge_backend, judge_model)
+    elif benchmark == "deepplanning":
+        from openjarvis.evals.scorers.deepplanning_scorer import DeepPlanningScorer
+        return DeepPlanningScorer(judge_backend, judge_model)
+    elif benchmark == "paperarena":
+        from openjarvis.evals.scorers.paperarena_judge import PaperArenaScorer
+        return PaperArenaScorer(judge_backend, judge_model)
+    elif benchmark == "webchorearena":
+        from openjarvis.evals.scorers.webchorearena_scorer import WebChoreArenaScorer
+        return WebChoreArenaScorer(judge_backend, judge_model)
+    elif benchmark == "workarena":
+        from openjarvis.evals.scorers.workarena_scorer import WorkArenaScorer
+        return WorkArenaScorer(judge_backend, judge_model)
     else:
         raise click.ClickException(f"Unknown benchmark: {benchmark}")
 
