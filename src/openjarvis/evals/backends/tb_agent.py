@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from terminal_bench.agents.base_agent import BaseAgent, AgentResult
 from terminal_bench.agents.naive_agent import NaiveAgent
 from terminal_bench.llms.lite_llm import LiteLLM
 

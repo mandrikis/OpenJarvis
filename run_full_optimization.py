@@ -3,8 +3,6 @@
 
 import logging
 import os
-import sys
-
 from pathlib import Path
 
 # Load env
@@ -24,12 +22,16 @@ logging.basicConfig(
 )
 log = logging.getLogger("full_optimization")
 
-from openjarvis.optimize.config import load_benchmark_specs, load_objectives, load_optimize_config
-from openjarvis.optimize.llm_optimizer import LLMOptimizer
-from openjarvis.optimize.optimizer import OptimizationEngine
-from openjarvis.optimize.search_space import build_search_space
-from openjarvis.optimize.store import OptimizationStore
-from openjarvis.optimize.trial_runner import MultiBenchTrialRunner
+from openjarvis.optimize.config import (  # noqa: E402
+    load_benchmark_specs,
+    load_objectives,
+    load_optimize_config,
+)
+from openjarvis.optimize.llm_optimizer import LLMOptimizer  # noqa: E402
+from openjarvis.optimize.optimizer import OptimizationEngine  # noqa: E402
+from openjarvis.optimize.search_space import build_search_space  # noqa: E402
+from openjarvis.optimize.store import OptimizationStore  # noqa: E402
+from openjarvis.optimize.trial_runner import MultiBenchTrialRunner  # noqa: E402
 
 CONFIG = "src/openjarvis/optimize/configs/qwen3.5-joint-agentic.toml"
 
@@ -54,7 +56,7 @@ max_trials = opt.get("max_trials", 15)
 early_stop = opt.get("early_stop_patience", 5)
 
 # Build optimizer backend (Anthropic)
-from openjarvis.evals.cli import _build_judge_backend
+from openjarvis.evals.cli import _build_judge_backend  # noqa: E402
 
 optimizer_backend = _build_judge_backend(optimizer_model)
 log.info("Optimizer backend ready: %s", optimizer_model)

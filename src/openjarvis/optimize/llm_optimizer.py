@@ -657,7 +657,8 @@ class LLMOptimizer:
                 continue
 
         # Last resort: return config with at least the fixed params
-        fixed = dict(self.search_space.fixed) if self.search_space and self.search_space.fixed else {}
+        ss = self.search_space
+        fixed = dict(ss.fixed) if ss and ss.fixed else {}
         return TrialConfig(
             trial_id=trial_id,
             params=fixed,

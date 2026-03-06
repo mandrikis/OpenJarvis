@@ -1,18 +1,20 @@
-"""Native terminal-bench v2 backend — uses Harness for Docker-based execution and scoring."""
+"""Native terminal-bench v2 backend.
+
+Uses Harness for Docker-based execution and scoring.
+"""
 
 from __future__ import annotations
 
 import logging
-import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from openjarvis.evals.core.backend import InferenceBackend
 
 LOGGER = logging.getLogger(__name__)
 
 try:
-    from terminal_bench import Harness, BenchmarkResults
+    from terminal_bench import BenchmarkResults, Harness
     from terminal_bench.llms.lite_llm import LiteLLM
 
     _HAS_TB = True
@@ -97,8 +99,10 @@ class TerminalBenchNativeBackend(InferenceBackend):
                  temperature: float = 0.0, max_tokens: int = 2048) -> str:
         return ""
 
-    def generate_full(self, prompt: str, *, model: str, system: str = "",
-                      temperature: float = 0.0, max_tokens: int = 2048) -> Dict[str, Any]:
+    def generate_full(
+        self, prompt: str, *, model: str, system: str = "",
+        temperature: float = 0.0, max_tokens: int = 2048,
+    ) -> Dict[str, Any]:
         return {"content": "", "usage": {}, "model": model, "latency_seconds": 0.0}
 
     def close(self) -> None:

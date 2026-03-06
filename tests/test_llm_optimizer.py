@@ -518,7 +518,8 @@ class TestParseConfigResponse:
         opt = self._make_optimizer()
         response = "I cannot produce a valid configuration right now."
         config = opt._parse_config_response(response)
-        assert config.params == {}
+        # Fixed params are injected even when parsing fails
+        assert config.params == {"engine": "ollama"}
         assert "Failed to parse" in config.reasoning
 
     def test_trial_id_is_12_chars(self) -> None:
@@ -538,7 +539,8 @@ class TestParseConfigResponse:
         opt = self._make_optimizer()
         response = '```json\n{"reasoning": "just thinking"}\n```'
         config = opt._parse_config_response(response)
-        assert config.params == {}
+        # Fixed params are injected even when "params" key is missing
+        assert config.params == {"engine": "ollama"}
         assert config.reasoning == "just thinking"
 
     def test_json_with_surrounding_text(self) -> None:

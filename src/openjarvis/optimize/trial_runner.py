@@ -243,7 +243,7 @@ class MultiBenchTrialRunner:
         """Run terminal-bench natively via Harness with Docker execution."""
         import time
 
-        from terminal_bench import Harness, BenchmarkResults
+        from terminal_bench import BenchmarkResults, Harness
 
         recipe = trial.to_recipe()
         model_name = recipe.model or "default"
@@ -267,7 +267,10 @@ class MultiBenchTrialRunner:
             "dataset_name": "terminal-bench-core",
             "dataset_version": "0.1.1",
             "model_name": litellm_model,
-            "agent_import_path": "openjarvis.evals.backends.tb_agent:OpenJarvisTerminalBenchAgent",
+            "agent_import_path": (
+                "openjarvis.evals.backends.tb_agent"
+                ":OpenJarvisTerminalBenchAgent"
+            ),
             "agent_kwargs": {
                 "model_name": litellm_model,
                 "api_base": api_base,
