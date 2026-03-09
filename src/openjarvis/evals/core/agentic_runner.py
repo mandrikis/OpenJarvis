@@ -444,6 +444,20 @@ class AgenticRunner:
         query_gpu_power_avg = _compute_power_avg(readings, "gpu_power_w")
         query_cpu_power_avg = _compute_power_avg(readings, "cpu_power_w")
 
+        # Extract MBU from telemetry readings
+        mbu_values = [
+            getattr(s, "gpu_memory_bandwidth_utilization_pct", None)
+            for s in readings
+        ]
+        mbu_values = [
+            v for v in mbu_values
+            if v is not None and v >= 0
+        ]
+        query_mbu_avg = (
+            statistics.mean(mbu_values) if mbu_values else None
+        )
+        query_mbu_max = max(mbu_values) if mbu_values else None
+
         trace = QueryTrace(
             query_id=query_id,
             workload_type=str(workload_type),
@@ -457,6 +471,8 @@ class AgenticRunner:
             query_gpu_power_avg_watts=query_gpu_power_avg,
             query_cpu_power_avg_watts=query_cpu_power_avg,
             is_resolved=record.metadata.get("is_resolved"),
+            query_mbu_avg_pct=query_mbu_avg,
+            query_mbu_max_pct=query_mbu_max,
         )
 
         # Correlate energy with trace

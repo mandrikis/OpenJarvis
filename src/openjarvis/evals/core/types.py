@@ -139,6 +139,9 @@ class RunSummary:
     total_input_tokens: int = 0
     total_output_tokens: int = 0
     trace_step_type_stats: Dict[str, Dict[str, float]] = field(default_factory=dict)
+    efficiency: Optional[Dict[str, Any]] = None
+    normalized_statistics: Optional[Dict[str, Any]] = None
+    normalized_efficiency: Optional[Dict[str, Any]] = None
     # Internal fields set by the runner after construction
     _output_path: Optional[Path] = None
     _traces_dir: Optional[Path] = None

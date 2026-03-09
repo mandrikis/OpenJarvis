@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import statistics
 import time
 from collections import defaultdict
@@ -403,6 +404,26 @@ class EvalRunner:
         total_output_tokens = sum(r.completion_tokens for r in results)
         avg_power = statistics.mean(power_vals) if power_vals else 0.0
 
+        # Compute efficiency section
+        efficiency_dict: Dict[str, Any] = {
+            "accuracy": round(accuracy, 4),
+            "total_energy_joules": round(total_energy, 6),
+            "avg_power_watts": round(avg_power, 4),
+            "ipj": (
+                round(accuracy / total_energy, 6)
+                if total_energy > 0 else None
+            ),
+            "ipw": (
+                round(accuracy / avg_power, 6)
+                if avg_power > 0 else None
+            ),
+        }
+
+        # Compute normalized statistics (trim 5% outliers by latency)
+        normalized_stats, normalized_eff = _compute_normalized_stats(
+            results, accuracy,
+        )
+
         return RunSummary(
             benchmark=cfg.benchmark,
             category=category,
@@ -439,7 +460,78 @@ class EvalRunner:
             avg_power_watts=round(avg_power, 4),
             total_input_tokens=total_input_tokens,
             total_output_tokens=total_output_tokens,
+            efficiency=efficiency_dict,
+            normalized_statistics=normalized_stats,
+            normalized_efficiency=normalized_eff,
         )
+
+
+def _compute_normalized_stats(
+    results: List[EvalResult],
+    accuracy: float,
+) -> tuple[Optional[Dict[str, Any]], Optional[Dict[str, Any]]]:
+    """Compute stats after trimming top/bottom 5% outliers by latency.
+
+    Returns (normalized_statistics, normalized_efficiency) or (None, None)
+    if fewer than 4 results.
+    """
+    n = len(results)
+    if n < 4:
+        return None, None
+
+    trim_count = max(1, math.floor(n * 0.05))
+    sorted_results = sorted(results, key=lambda r: r.latency_seconds)
+    trimmed = sorted_results[trim_count: n - trim_count]
+
+    if not trimmed:
+        return None, None
+
+    # Recompute key metric stats on trimmed set
+    t_scored = [r for r in trimmed if r.is_correct is not None]
+    t_correct = [r for r in t_scored if r.is_correct]
+    t_accuracy = len(t_correct) / len(t_scored) if t_scored else 0.0
+    t_latency_vals = [r.latency_seconds for r in trimmed if r.latency_seconds > 0]
+    t_energy_vals = [r.energy_joules for r in trimmed if r.energy_joules > 0]
+    t_power_vals = [r.power_watts for r in trimmed if r.power_watts > 0]
+    t_throughput_vals = [
+        r.throughput_tok_per_sec for r in trimmed
+        if r.throughput_tok_per_sec > 0
+    ]
+    t_mbu_vals = [r.mbu_pct for r in trimmed if r.mbu_pct > 0]
+
+    norm_stats: Dict[str, Any] = {
+        "_description": (
+            f"Statistics recomputed after trimming {trim_count} outlier(s) "
+            f"from each end by latency ({len(trimmed)}/{n} results kept)"
+        ),
+        "_outliers_removed": trim_count * 2,
+        "accuracy": round(t_accuracy, 4),
+        "latency_stats": _metric_stats_to_dict(_metric_stats(t_latency_vals)),
+        "energy_stats": _metric_stats_to_dict(_metric_stats(t_energy_vals)),
+        "power_stats": _metric_stats_to_dict(_metric_stats(t_power_vals)),
+        "throughput_stats": _metric_stats_to_dict(
+            _metric_stats(t_throughput_vals),
+        ),
+        "mbu_stats": _metric_stats_to_dict(_metric_stats(t_mbu_vals)),
+    }
+
+    t_total_energy = sum(r.energy_joules for r in trimmed)
+    t_avg_power = statistics.mean(t_power_vals) if t_power_vals else 0.0
+    norm_eff: Dict[str, Any] = {
+        "accuracy": round(t_accuracy, 4),
+        "total_energy_joules": round(t_total_energy, 6),
+        "avg_power_watts": round(t_avg_power, 4),
+        "ipj": (
+            round(t_accuracy / t_total_energy, 6)
+            if t_total_energy > 0 else None
+        ),
+        "ipw": (
+            round(t_accuracy / t_avg_power, 6)
+            if t_avg_power > 0 else None
+        ),
+    }
+
+    return norm_stats, norm_eff
 
 
 def _eval_percentile(data: list[float], p: float) -> float:
@@ -529,6 +621,9 @@ def _summary_to_dict(s: RunSummary) -> Dict[str, Any]:
         "avg_power_watts": s.avg_power_watts,
         "total_input_tokens": s.total_input_tokens,
         "total_output_tokens": s.total_output_tokens,
+        "efficiency": s.efficiency,
+        "normalized_statistics": s.normalized_statistics,
+        "normalized_efficiency": s.normalized_efficiency,
     }
 
 

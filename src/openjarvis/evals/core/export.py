@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import statistics
 import time
 from pathlib import Path
@@ -22,6 +23,128 @@ def _agg_stats(values: Sequence[Optional[float]]) -> dict[str, Optional[float]]:
         "min": min(clean),
         "max": max(clean),
         "std": statistics.stdev(clean) if len(clean) > 1 else 0.0,
+    }
+
+
+def _compute_efficiency(
+    traces: list[QueryTrace],
+    total_gpu_energy: Optional[float],
+    total_cpu_energy: Optional[float],
+) -> dict[str, Optional[float]]:
+    """Compute efficiency metrics from traces and aggregate energy."""
+    scored = [t for t in traces if t.is_resolved is not None]
+    resolved = sum(1 for t in scored if t.is_resolved is True)
+    accuracy = resolved / len(scored) if scored else None
+    gpu_powers = [
+        t.avg_gpu_power_watts for t in traces
+        if t.avg_gpu_power_watts is not None
+    ]
+    cpu_powers = [
+        t.avg_cpu_power_watts for t in traces
+        if t.avg_cpu_power_watts is not None
+    ]
+    avg_gpu_power = statistics.mean(gpu_powers) if gpu_powers else None
+    avg_cpu_power = statistics.mean(cpu_powers) if cpu_powers else None
+    return {
+        "accuracy": accuracy,
+        "total_gpu_energy_joules": total_gpu_energy,
+        "total_cpu_energy_joules": total_cpu_energy,
+        "avg_gpu_power_watts": avg_gpu_power,
+        "avg_cpu_power_watts": avg_cpu_power,
+        "ipj": (
+            accuracy / total_gpu_energy
+            if accuracy and total_gpu_energy
+            else None
+        ),
+        "ipw": (
+            accuracy / avg_gpu_power
+            if accuracy and avg_gpu_power
+            else None
+        ),
+    }
+
+
+def _compute_normalized(
+    traces: list[QueryTrace],
+) -> Optional[dict[str, Any]]:
+    """Recompute stats after trimming top/bottom 5% outliers by wall_clock.
+
+    Returns None if fewer than 4 traces (trimming would remove too much data).
+    """
+    n = len(traces)
+    if n < 4:
+        return None
+
+    trim_count = max(1, math.floor(n * 0.05))
+    sorted_traces = sorted(traces, key=lambda t: t.total_wall_clock_s)
+    trimmed = sorted_traces[trim_count: n - trim_count]
+
+    if not trimmed:
+        return None
+
+    # Recompute aggregate energy on trimmed set
+    gpu_energy_values = [
+        t.total_gpu_energy_joules for t in trimmed
+        if t.total_gpu_energy_joules is not None
+    ]
+    total_gpu_energy = sum(gpu_energy_values) if gpu_energy_values else None
+
+    cpu_energy_values: list[float] = []
+    for trace in trimmed:
+        cpu_vals = [
+            turn.cpu_energy_joules for turn in trace.turns
+            if turn.cpu_energy_joules is not None
+        ]
+        if cpu_vals:
+            cpu_energy_values.append(sum(cpu_vals))
+    total_cpu_energy = sum(cpu_energy_values) if cpu_energy_values else None
+
+    norm_stats = {
+        "_description": (
+            f"Statistics recomputed after trimming {trim_count} outlier(s) "
+            f"from each end by wall_clock_s ({len(trimmed)}/{n} traces kept)"
+        ),
+        "_outliers_removed": trim_count * 2,
+        "wall_clock_s": _agg_stats(
+            [t.total_wall_clock_s for t in trimmed],
+        ),
+        "gpu_energy_joules": _agg_stats(
+            [t.total_gpu_energy_joules for t in trimmed],
+        ),
+        "cpu_energy_joules": _agg_stats(
+            [t.total_cpu_energy_joules for t in trimmed],
+        ),
+        "gpu_power_watts": _agg_stats(
+            [t.avg_gpu_power_watts for t in trimmed],
+        ),
+        "cpu_power_watts": _agg_stats(
+            [t.avg_cpu_power_watts for t in trimmed],
+        ),
+        "input_tokens": _agg_stats(
+            [float(t.total_input_tokens) for t in trimmed],
+        ),
+        "output_tokens": _agg_stats(
+            [float(t.total_output_tokens) for t in trimmed],
+        ),
+        "total_tokens": _agg_stats(
+            [float(t.total_tokens) for t in trimmed],
+        ),
+        "throughput_tokens_per_sec": _agg_stats(
+            [t.throughput_tokens_per_sec for t in trimmed],
+        ),
+        "energy_per_token_joules": _agg_stats(
+            [t.energy_per_token_joules for t in trimmed],
+        ),
+        "mbu_avg_pct": _agg_stats(
+            [t.query_mbu_avg_pct for t in trimmed],
+        ),
+    }
+
+    norm_efficiency = _compute_efficiency(trimmed, total_gpu_energy, total_cpu_energy)
+
+    return {
+        "normalized_statistics": norm_stats,
+        "normalized_efficiency": norm_efficiency,
     }
 
 
@@ -65,6 +188,8 @@ def export_summary_json(
     traces: list[QueryTrace],
     config: dict[str, Any],
     path: Path,
+    *,
+    bench_energy: Optional[dict[str, Any]] = None,
 ) -> Path:
     """Export aggregate summary as JSON.
 
@@ -72,6 +197,7 @@ def export_summary_json(
         traces: List of QueryTrace objects.
         config: Run configuration dictionary.
         path: Output file path.
+        bench_energy: Optional benchmark-level aggregate telemetry dict.
 
     Returns:
         The path to the written file.
@@ -152,9 +278,22 @@ def export_summary_json(
         "tool_calls": _agg_stats(
             [float(t.total_tool_calls) for t in traces],
         ),
+        "mbu_avg_pct": _agg_stats(
+            [t.query_mbu_avg_pct for t in traces],
+        ),
     }
 
-    summary = {
+    accuracy = (
+        resolved / (resolved + unresolved)
+        if (resolved + unresolved) > 0
+        else None
+    )
+
+    efficiency = _compute_efficiency(traces, total_gpu_energy, total_cpu_energy)
+
+    normalized = _compute_normalized(traces)
+
+    summary: dict[str, Any] = {
         "generated_at": time.time(),
         "config": config,
         "totals": {
@@ -162,6 +301,7 @@ def export_summary_json(
             "completed": completed,
             "resolved": resolved,
             "unresolved": unresolved,
+            "accuracy": accuracy,
             "turns": total_turns,
             "tool_calls": total_tool_calls,
             "input_tokens": total_input_tokens,
@@ -178,7 +318,15 @@ def export_summary_json(
             "gpu_energy_per_query_joules": avg_gpu_energy,
         },
         "statistics": stats,
+        "efficiency": efficiency,
     }
+
+    if normalized is not None:
+        summary["normalized_statistics"] = normalized["normalized_statistics"]
+        summary["normalized_efficiency"] = normalized["normalized_efficiency"]
+
+    if bench_energy is not None:
+        summary["bench_telemetry"] = bench_energy
 
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(summary, indent=2, default=str))

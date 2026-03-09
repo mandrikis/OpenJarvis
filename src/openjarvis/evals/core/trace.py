@@ -81,6 +81,8 @@ class QueryTrace:
     query_gpu_power_avg_watts: Optional[float] = None
     query_cpu_power_avg_watts: Optional[float] = None
     is_resolved: Optional[bool] = None
+    query_mbu_avg_pct: Optional[float] = None
+    query_mbu_max_pct: Optional[float] = None
 
     @property
     def num_turns(self) -> int:
@@ -184,6 +186,8 @@ class QueryTrace:
             "query_gpu_power_avg_watts": self.query_gpu_power_avg_watts,
             "query_cpu_power_avg_watts": self.query_cpu_power_avg_watts,
             "is_resolved": self.is_resolved,
+            "query_mbu_avg_pct": self.query_mbu_avg_pct,
+            "query_mbu_max_pct": self.query_mbu_max_pct,
         }
 
     @classmethod
@@ -202,6 +206,8 @@ class QueryTrace:
             query_gpu_power_avg_watts=d.get("query_gpu_power_avg_watts"),
             query_cpu_power_avg_watts=d.get("query_cpu_power_avg_watts"),
             is_resolved=d.get("is_resolved"),
+            query_mbu_avg_pct=d.get("query_mbu_avg_pct"),
+            query_mbu_max_pct=d.get("query_mbu_max_pct"),
         )
 
     def save_jsonl(self, path: Path) -> None:
@@ -253,6 +259,8 @@ class QueryTrace:
                 "completed": trace.completed,
                 "timed_out": trace.timed_out,
                 "is_resolved": trace.is_resolved,
+                "query_mbu_avg_pct": trace.query_mbu_avg_pct,
+                "query_mbu_max_pct": trace.query_mbu_max_pct,
                 "trace_json": json.dumps(trace.to_dict()),
             })
         return Dataset.from_list(rows)
