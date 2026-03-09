@@ -23,24 +23,34 @@ graph LR
 
 ## Supported Channels
 
-| Channel | Registry Key | Platform | Auth |
-|---------|-------------|----------|------|
-| `TelegramChannel` | `telegram` | Telegram Bot API | Bot token |
-| `DiscordChannel` | `discord` | Discord Bot API | Bot token |
-| `SlackChannel` | `slack` | Slack Web API | Bot + App tokens |
-| `WhatsAppChannel` | `whatsapp` | WhatsApp Business API | API token |
-| `WhatsAppBaileysChannel` | `whatsapp_baileys` | WhatsApp (Baileys protocol) | QR code auth |
-| `WebhookChannel` | `webhook` | Generic HTTP webhook | URL + optional secret |
-| `EmailChannel` | `email` | SMTP/IMAP email | Email credentials |
-| `SignalChannel` | `signal` | Signal Messenger | Signal CLI |
-| `GoogleChatChannel` | `google_chat` | Google Chat | Service account |
-| `IRCChannel` | `irc` | IRC | Server credentials |
-| `WebChatChannel` | `webchat` | Browser-based chat | None |
-| `TeamsChannel` | `teams` | Microsoft Teams | Bot credentials |
-| `MatrixChannel` | `matrix` | Matrix protocol | Homeserver + token |
-| `MattermostChannel` | `mattermost` | Mattermost | Bot token |
-| `FeishuChannel` | `feishu` | Feishu/Lark | App credentials |
-| And more... | | | |
+| Channel | Registry Key | Platform | Pip Extra | Auth |
+|---------|-------------|----------|-----------|------|
+| `TelegramChannel` | `telegram` | Telegram Bot API | `channel-telegram` | Bot token |
+| `DiscordChannel` | `discord` | Discord Bot API | `channel-discord` | Bot token |
+| `SlackChannel` | `slack` | Slack Web API | `channel-slack` | Bot + App tokens |
+| `WhatsAppChannel` | `whatsapp` | WhatsApp Business API | — | API token |
+| `WhatsAppBaileysChannel` | `whatsapp_baileys` | WhatsApp (Baileys) | — | QR code auth |
+| `WebhookChannel` | `webhook` | Generic HTTP webhook | — | URL + optional secret |
+| `EmailChannel` | `email` | SMTP/IMAP email | — | Email credentials |
+| `SignalChannel` | `signal` | Signal Messenger | — | Signal CLI |
+| `GoogleChatChannel` | `google_chat` | Google Chat | — | Service account |
+| `IRCChannel` | `irc` | IRC | — | Server credentials |
+| `WebChatChannel` | `webchat` | Browser-based chat | — | None |
+| `TeamsChannel` | `teams` | Microsoft Teams | — | Bot credentials |
+| `MatrixChannel` | `matrix` | Matrix protocol | — | Homeserver + token |
+| `MattermostChannel` | `mattermost` | Mattermost | — | Bot token |
+| `FeishuChannel` | `feishu` | Feishu/Lark | — | App credentials |
+| `BlueBubblesChannel` | `bluebubbles` | iMessage (BlueBubbles) | — | BlueBubbles server |
+| `LineChannel` | `line` | LINE Messaging API | `channel-line` | Channel access token |
+| `ViberChannel` | `viber` | Viber Bot API | `channel-viber` | Auth token |
+| `MessengerChannel` | `messenger` | Facebook Messenger | `channel-messenger` | Page access token |
+| `RedditChannel` | `reddit` | Reddit API | `channel-reddit` | OAuth credentials |
+| `MastodonChannel` | `mastodon` | Mastodon API | `channel-mastodon` | Access token |
+| `XMPPChannel` | `xmpp` | XMPP/Jabber | `channel-xmpp` | JID + password |
+| `RocketChatChannel` | `rocketchat` | Rocket.Chat API | `channel-rocketchat` | User credentials |
+| `ZulipChannel` | `zulip` | Zulip API | `channel-zulip` | Bot email + API key |
+| `TwitchChannel` | `twitch` | Twitch IRC/API | `channel-twitch` | OAuth token |
+| `NostrChannel` | `nostr` | Nostr protocol | `channel-nostr` | Private key (nsec) |
 
 ---
 
