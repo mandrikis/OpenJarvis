@@ -115,7 +115,7 @@ class EventBus:
             try:
                 listeners.remove(callback)
             except ValueError:
-                pass
+                pass  # Callback already removed — idempotent
 
     # -- publish ------------------------------------------------------------
 
