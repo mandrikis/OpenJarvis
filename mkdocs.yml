@@ -129,6 +129,7 @@ extra:
 
 nav:
   - Home: index.md
+  - Leaderboard: leaderboard.md
   - Getting Started:
       - Installation: getting-started/installation.md
       - Quick Start: getting-started/quickstart.md

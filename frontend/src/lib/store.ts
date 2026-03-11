@@ -14,6 +14,10 @@ import type {
 
 const CONVERSATIONS_KEY = 'openjarvis-conversations';
 const SETTINGS_KEY = 'openjarvis-settings';
+const OPTIN_KEY = 'openjarvis-optin';
+const OPTIN_NAME_KEY = 'openjarvis-display-name';
+const OPTIN_ANONID_KEY = 'openjarvis-anon-id';
+const OPTIN_SEEN_KEY = 'openjarvis-optin-seen';
 
 interface ConversationStore {
   version: 1;
@@ -114,6 +118,13 @@ interface AppState {
   // System panel
   systemPanelOpen: boolean;
 
+  // Opt-in sharing
+  optInEnabled: boolean;
+  optInDisplayName: string;
+  optInAnonId: string;
+  optInModalSeen: boolean;
+  optInModalOpen: boolean;
+
   // Actions: conversations
   loadConversations: () => void;
   createConversation: (model?: string) => string;
@@ -146,6 +157,11 @@ interface AppState {
   setSidebarOpen: (open: boolean) => void;
   toggleSystemPanel: () => void;
   setSystemPanelOpen: (open: boolean) => void;
+
+  // Actions: opt-in sharing
+  setOptIn: (enabled: boolean, displayName: string) => void;
+  setOptInModalOpen: (open: boolean) => void;
+  markOptInModalSeen: () => void;
 }
 
 export const useAppStore = create<AppState>((set, get) => {
@@ -174,6 +190,12 @@ export const useAppStore = create<AppState>((set, get) => {
     commandPaletteOpen: false,
     sidebarOpen: true,
     systemPanelOpen: true,
+
+    optInEnabled: localStorage.getItem(OPTIN_KEY) === 'true',
+    optInDisplayName: localStorage.getItem(OPTIN_NAME_KEY) || '',
+    optInAnonId: localStorage.getItem(OPTIN_ANONID_KEY) || crypto.randomUUID(),
+    optInModalSeen: localStorage.getItem(OPTIN_SEEN_KEY) === 'true',
+    optInModalOpen: false,
 
     // ── Conversations ───────────────────────────────────────────────
 
@@ -323,6 +345,21 @@ export const useAppStore = create<AppState>((set, get) => {
     setSidebarOpen: (open: boolean) => set({ sidebarOpen: open }),
     toggleSystemPanel: () => set((s) => ({ systemPanelOpen: !s.systemPanelOpen })),
     setSystemPanelOpen: (open: boolean) => set({ systemPanelOpen: open }),
+
+    // ── Opt-in sharing ──────────────────────────────────────────────
+
+    setOptIn: (enabled: boolean, displayName: string) => {
+      const anonId = get().optInAnonId;
+      localStorage.setItem(OPTIN_KEY, String(enabled));
+      localStorage.setItem(OPTIN_NAME_KEY, displayName);
+      localStorage.setItem(OPTIN_ANONID_KEY, anonId);
+      set({ optInEnabled: enabled, optInDisplayName: displayName });
+    },
+    setOptInModalOpen: (open: boolean) => set({ optInModalOpen: open }),
+    markOptInModalSeen: () => {
+      localStorage.setItem(OPTIN_SEEN_KEY, 'true');
+      set({ optInModalSeen: true });
+    },
   };
 });
 
