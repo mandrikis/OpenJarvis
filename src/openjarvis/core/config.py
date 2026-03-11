@@ -1086,7 +1086,7 @@ def load_config(path: Optional[Path] = None) -> JarvisConfig:
             "server", "telemetry", "traces", "security",
             "channel", "tools", "sandbox", "scheduler",
             "workflow", "sessions", "a2a", "operators",
-            "speech", "optimize",
+            "speech", "optimize", "agent_manager",
         )
         for section_name in top_sections:
             if section_name in data:
@@ -1104,6 +1104,38 @@ def load_config(path: Optional[Path] = None) -> JarvisConfig:
 # ---------------------------------------------------------------------------
 # Default TOML generation (for ``jarvis init``)
 # ---------------------------------------------------------------------------
+
+
+def generate_minimal_toml(hw: HardwareInfo) -> str:
+    """Render a minimal TOML config with only essential settings."""
+    engine = recommend_engine(hw)
+    model = recommend_model(hw, engine)
+    gpu_comment = ""
+    if hw.gpu:
+        mem_label = (
+            "unified memory" if hw.gpu.vendor == "apple" else "VRAM"
+        )
+        gpu_comment = (
+            f"\n# GPU: {hw.gpu.name}"
+            f" ({hw.gpu.vram_gb} GB {mem_label})"
+        )
+    return f"""\
+# OpenJarvis configuration
+# Hardware: {hw.cpu_brand} ({hw.cpu_count} cores, {hw.ram_gb} GB RAM){gpu_comment}
+# Full reference config: jarvis init --full
+
+[engine]
+default = "{engine}"
+
+[intelligence]
+default_model = "{model}"
+
+[agent]
+default_agent = "simple"
+
+[tools]
+enabled = ["code_interpreter", "web_search", "file_read", "shell_exec"]
+"""
 
 
 def generate_default_toml(hw: HardwareInfo) -> str:
@@ -1372,6 +1404,7 @@ __all__ = [
     "WorkflowConfig",
     "detect_hardware",
     "generate_default_toml",
+    "generate_minimal_toml",
     "load_config",
     "recommend_engine",
     "recommend_model",

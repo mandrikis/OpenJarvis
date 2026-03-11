@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import inspect
 import json
+import logging
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, Request, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
+
+logger = logging.getLogger(__name__)
 
 # ---- Request/Response models ----
 
@@ -63,8 +66,8 @@ async def list_agents(request: Request):
                 "class": cls.__name__,
                 "accepts_tools": getattr(cls, "accepts_tools", False),
             })
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Failed to list registered agents: %s", exc)
 
     running = []
     try:
@@ -281,7 +284,8 @@ async def list_skills(request: Request):
         for key in sorted(SkillRegistry.keys()):
             skills.append({"name": key})
         return {"skills": skills}
-    except Exception:
+    except Exception as exc:
+        logger.warning("Failed to list skills: %s", exc)
         return {"skills": []}
 
 @skills_router.post("")
@@ -396,7 +400,8 @@ async def prometheus_metrics(request: Request):
         ]
         from starlette.responses import PlainTextResponse
         return PlainTextResponse("\n".join(lines) + "\n", media_type="text/plain")
-    except Exception:
+    except Exception as exc:
+        logger.warning("Failed to collect Prometheus metrics: %s", exc)
         from starlette.responses import PlainTextResponse
         return PlainTextResponse(
             "# No metrics available\n", media_type="text/plain"
@@ -536,7 +541,8 @@ async def learning_stats(request: Request):
                 len(qc_weights) for qc_weights in state.weights.values()
             ),
         }
-    except Exception:
+    except Exception as exc:
+        logger.warning("Failed to load GRPO stats: %s", exc)
         result["grpo"] = {"available": False}
 
     # Bandit router state
@@ -549,7 +555,8 @@ async def learning_stats(request: Request):
             "query_classes": len(stats),
             "arms": stats,
         }
-    except Exception:
+    except Exception as exc:
+        logger.warning("Failed to load bandit stats: %s", exc)
         result["bandit"] = {"available": False}
 
     # ICL updater
@@ -562,7 +569,8 @@ async def learning_stats(request: Request):
             "example_db_count": len(updater.example_db),
             "version": updater.version,
         }
-    except Exception:
+    except Exception as exc:
+        logger.warning("Failed to load ICL stats: %s", exc)
         result["icl"] = {"available": False}
 
     # Skill discovery
@@ -573,7 +581,8 @@ async def learning_stats(request: Request):
             "available": True,
             "discovered_count": len(discovery.discovered_skills),
         }
-    except Exception:
+    except Exception as exc:
+        logger.warning("Failed to load skill discovery stats: %s", exc)
         result["skill_discovery"] = {"available": False}
 
     return result
@@ -607,7 +616,8 @@ async def learning_policy(request: Request):
             "cost_weight": lc.metrics.cost_weight,
             "efficiency_weight": lc.metrics.efficiency_weight,
         }
-    except Exception:
+    except Exception as exc:
+        logger.warning("Failed to load learning config: %s", exc)
         result["enabled"] = False
         result["routing"] = {"policy": "heuristic", "min_samples": 5}
         result["intelligence"] = {"policy": "none"}
@@ -624,7 +634,8 @@ async def learning_policy(request: Request):
                 model: dict(qc_weights)
                 for model, qc_weights in state.weights.items()
             }
-        except Exception:
+        except Exception as exc:
+            logger.warning("Failed to load GRPO weights: %s", exc)
             result["grpo_weights"] = {}
 
     return result
@@ -732,7 +743,8 @@ async def list_optimize_runs(request: Request):
         runs = store.list_runs()
         store.close()
         return {"runs": runs}
-    except Exception:
+    except Exception as exc:
+        logger.warning("Failed to list optimization runs: %s", exc)
         return {"runs": []}
 
 
@@ -763,7 +775,10 @@ async def get_optimize_run(run_id: str, request: Request):
                 run.best_trial.trial_id if run.best_trial else None
             ),
         }
-    except Exception:
+    except Exception as exc:
+        logger.warning(
+            "Failed to get optimization run %s: %s", run_id, exc
+        )
         return {"run_id": run_id, "status": "not_found"}
 
 
@@ -788,6 +803,17 @@ def include_all_routes(app) -> None:
     app.include_router(speech_router)
     app.include_router(feedback_router)
     app.include_router(optimize_router)
+
+    # Agent Manager routes (if available)
+    try:
+        if hasattr(app.state, "agent_manager") and app.state.agent_manager:
+            from openjarvis.server.agent_manager_routes import (  # noqa: PLC0415
+                create_agent_manager_router,
+            )
+            am_router = create_agent_manager_router(app.state.agent_manager)
+            app.include_router(am_router)
+    except ImportError:
+        pass
 
 
 __all__ = [

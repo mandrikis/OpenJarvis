@@ -44,6 +44,22 @@ CREATE TABLE IF NOT EXISTS trace_steps (
 );
 """
 
+_CREATE_FTS = """\
+CREATE VIRTUAL TABLE IF NOT EXISTS traces_fts USING fts5(
+    trace_id, query, result, agent,
+    content='traces',
+    content_rowid='rowid',
+    tokenize='unicode61'
+);
+"""
+
+_FTS_SYNC_INSERT = """\
+CREATE TRIGGER IF NOT EXISTS traces_fts_ai AFTER INSERT ON traces BEGIN
+    INSERT INTO traces_fts(rowid, trace_id, query, result, agent)
+    VALUES (new.rowid, new.trace_id, new.query, new.result, new.agent);
+END;
+"""
+
 _INSERT_TRACE = """\
 INSERT INTO traces (
     trace_id, query, agent, model, engine, result,
@@ -69,6 +85,8 @@ class TraceStore:
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.execute(_CREATE_TRACES)
         self._conn.execute(_CREATE_STEPS)
+        self._conn.execute(_CREATE_FTS)
+        self._conn.execute(_FTS_SYNC_INSERT)
         self._conn.commit()
 
     def save(self, trace: Trace) -> None:
@@ -156,6 +174,35 @@ class TraceStore:
         """Return the total number of stored traces."""
         row = self._conn.execute("SELECT COUNT(*) FROM traces").fetchone()
         return row[0] if row else 0
+
+    def search(
+        self,
+        query: str,
+        *,
+        agent: str | None = None,
+        limit: int = 20,
+    ) -> list[dict[str, Any]]:
+        """Full-text search across traces. Optionally filter by agent."""
+        sql = (
+            "SELECT t.trace_id, t.query, t.result, t.agent, t.model, t.outcome,"
+            " t.started_at "
+            "FROM traces_fts f JOIN traces t ON f.rowid = t.rowid "
+            "WHERE traces_fts MATCH ?"
+        )
+        params: list[Any] = [query]
+        if agent:
+            sql += " AND t.agent = ?"
+            params.append(agent)
+        sql += " ORDER BY rank LIMIT ?"
+        params.append(limit)
+        rows = self._conn.execute(sql, params).fetchall()
+        return [
+            {
+                "trace_id": r[0], "query": r[1], "result": r[2],
+                "agent": r[3], "model": r[4], "outcome": r[5], "started_at": r[6],
+            }
+            for r in rows
+        ]
 
     def subscribe_to_bus(self, bus: EventBus) -> None:
         """Subscribe to ``TRACE_COMPLETE`` events on *bus*."""

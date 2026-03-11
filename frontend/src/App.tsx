@@ -5,6 +5,7 @@ import { ChatPage } from './pages/ChatPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { GetStartedPage } from './pages/GetStartedPage';
+import { AgentsPage } from './pages/AgentsPage';
 import { CommandPalette } from './components/CommandPalette';
 import { SetupScreen } from './components/SetupScreen';
 import { useAppStore } from './lib/store';
@@ -122,6 +123,7 @@ export default function App() {
           <Route path="dashboard" element={<DashboardPage />} />
           <Route path="settings" element={<SettingsPage />} />
           <Route path="get-started" element={<GetStartedPage />} />
+          <Route path="agents" element={<AgentsPage />} />
         </Route>
       </Routes>
       {commandPaletteOpen && <CommandPalette />}

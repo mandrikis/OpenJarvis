@@ -186,6 +186,136 @@ export async function fetchSpeechHealth(): Promise<SpeechHealth> {
 }
 
 // ---------------------------------------------------------------------------
+// Agent Manager
+// ---------------------------------------------------------------------------
+
+export interface ManagedAgent {
+  id: string;
+  name: string;
+  agent_type: string;
+  config: Record<string, unknown>;
+  status: 'idle' | 'running' | 'paused' | 'error' | 'archived';
+  summary_memory: string;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface AgentTask {
+  id: string;
+  agent_id: string;
+  description: string;
+  status: 'pending' | 'active' | 'completed' | 'failed';
+  progress: Record<string, unknown>;
+  findings: unknown[];
+  created_at: number;
+}
+
+export interface ChannelBinding {
+  id: string;
+  agent_id: string;
+  channel_type: string;
+  config: Record<string, unknown>;
+  session_id: string;
+  routing_mode: string;
+}
+
+export interface AgentTemplate {
+  id: string;
+  name: string;
+  description: string;
+  source: 'built-in' | 'user';
+  agent_type: string;
+  [key: string]: unknown;
+}
+
+export async function fetchManagedAgents(): Promise<ManagedAgent[]> {
+  const res = await fetch(`${getBase()}/v1/managed-agents`);
+  if (!res.ok) throw new Error(`Failed: ${res.status}`);
+  const data = await res.json();
+  return data.agents || [];
+}
+
+export async function fetchManagedAgent(agentId: string): Promise<ManagedAgent> {
+  const res = await fetch(`${getBase()}/v1/managed-agents/${agentId}`);
+  if (!res.ok) throw new Error(`Failed: ${res.status}`);
+  return res.json();
+}
+
+export async function createManagedAgent(body: {
+  name: string;
+  agent_type?: string;
+  template_id?: string;
+  config?: Record<string, unknown>;
+}): Promise<ManagedAgent> {
+  const res = await fetch(`${getBase()}/v1/managed-agents`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`Failed: ${res.status}`);
+  return res.json();
+}
+
+export async function updateManagedAgent(
+  agentId: string,
+  body: Partial<{ name: string; agent_type: string; config: Record<string, unknown> }>,
+): Promise<ManagedAgent> {
+  const res = await fetch(`${getBase()}/v1/managed-agents/${agentId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`Failed: ${res.status}`);
+  return res.json();
+}
+
+export async function deleteManagedAgent(agentId: string): Promise<void> {
+  const res = await fetch(`${getBase()}/v1/managed-agents/${agentId}`, { method: 'DELETE' });
+  if (!res.ok) throw new Error(`Failed: ${res.status}`);
+}
+
+export async function pauseManagedAgent(agentId: string): Promise<void> {
+  const res = await fetch(`${getBase()}/v1/managed-agents/${agentId}/pause`, { method: 'POST' });
+  if (!res.ok) throw new Error(`Failed: ${res.status}`);
+}
+
+export async function resumeManagedAgent(agentId: string): Promise<void> {
+  const res = await fetch(`${getBase()}/v1/managed-agents/${agentId}/resume`, { method: 'POST' });
+  if (!res.ok) throw new Error(`Failed: ${res.status}`);
+}
+
+export async function fetchAgentTasks(agentId: string): Promise<AgentTask[]> {
+  const res = await fetch(`${getBase()}/v1/managed-agents/${agentId}/tasks`);
+  if (!res.ok) throw new Error(`Failed: ${res.status}`);
+  const data = await res.json();
+  return data.tasks || [];
+}
+
+export async function createAgentTask(agentId: string, description: string): Promise<AgentTask> {
+  const res = await fetch(`${getBase()}/v1/managed-agents/${agentId}/tasks`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ description }),
+  });
+  if (!res.ok) throw new Error(`Failed: ${res.status}`);
+  return res.json();
+}
+
+export async function fetchAgentChannels(agentId: string): Promise<ChannelBinding[]> {
+  const res = await fetch(`${getBase()}/v1/managed-agents/${agentId}/channels`);
+  if (!res.ok) throw new Error(`Failed: ${res.status}`);
+  const data = await res.json();
+  return data.bindings || [];
+}
+
+export async function fetchTemplates(): Promise<AgentTemplate[]> {
+  const res = await fetch(`${getBase()}/v1/templates`);
+  if (!res.ok) throw new Error(`Failed: ${res.status}`);
+  const data = await res.json();
+  return data.templates || [];
+}
+
+// ---------------------------------------------------------------------------
 // Leaderboard savings submission (Supabase)
 // ---------------------------------------------------------------------------
 

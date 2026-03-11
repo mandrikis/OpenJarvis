@@ -43,6 +43,7 @@ class JarvisSystem:
     session_store: Optional[Any] = None  # SessionStore
     capability_policy: Optional[Any] = None  # CapabilityPolicy
     operator_manager: Optional[Any] = None  # OperatorManager
+    agent_manager: Optional[Any] = None  # AgentManager
     speech_backend: Optional[Any] = None  # SpeechBackend
     _learning_orchestrator: Optional[Any] = None  # LearningOrchestrator
 
@@ -281,6 +282,8 @@ class JarvisSystem:
         ):
             if resource and hasattr(resource, "close"):
                 resource.close()
+        if self.agent_manager is not None:
+            self.agent_manager.close()
 
     def __enter__(self) -> JarvisSystem:
         return self
@@ -467,6 +470,21 @@ class SystemBuilder:
         # Set up learning orchestrator (when training is enabled)
         learning_orchestrator = self._setup_learning_orchestrator(config)
 
+        # Agent Manager
+        agent_manager = None
+        if config.agent_manager.enabled:
+            try:
+                from pathlib import Path
+
+                from openjarvis.agents.manager import AgentManager
+
+                am_db = config.agent_manager.db_path or str(
+                    Path("~/.openjarvis/agents.db").expanduser()
+                )
+                agent_manager = AgentManager(db_path=am_db)
+            except Exception as exc:
+                logger.warning("Failed to initialize agent manager: %s", exc)
+
         # Set up speech backend
         speech_backend = None
         speech_enabled = self._speech if self._speech is not None else True
@@ -496,6 +514,7 @@ class SystemBuilder:
             workflow_engine=workflow_engine,
             session_store=session_store,
             capability_policy=capability_policy,
+            agent_manager=agent_manager,
             speech_backend=speech_backend,
         )
         system._learning_orchestrator = learning_orchestrator

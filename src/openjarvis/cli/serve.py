@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import sys
 
 import click
@@ -18,6 +19,8 @@ from openjarvis.intelligence import (
     merge_discovered_models,
     register_builtin_models,
 )
+
+logger = logging.getLogger(__name__)
 
 
 @click.command()
@@ -78,8 +81,8 @@ def serve(
             db_path.parent.mkdir(parents=True, exist_ok=True)
             telem_store = TelemetryStore(str(db_path))
             telem_store.subscribe_to_bus(bus)
-        except Exception:
-            pass  # telemetry is best-effort
+        except Exception as exc:
+            logger.debug("Telemetry store init failed: %s", exc)
 
     resolved = get_engine(config, engine_key)
     if resolved is None:
@@ -105,12 +108,12 @@ def serve(
                     f"  Energy: [cyan]{energy_mon.vendor().value}[/cyan] "
                     f"({energy_mon.energy_method()})"
                 )
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Energy monitor creation failed: %s", exc)
 
         engine = InstrumentedEngine(engine, bus, energy_monitor=energy_mon)
-    except Exception:
-        pass  # instrumentation is best-effort
+    except Exception as exc:
+        logger.debug("Engine instrumentation failed: %s", exc)
 
     # Discover models
     all_engines = discover_engines(config)
@@ -206,8 +209,8 @@ def serve(
         speech_backend = get_speech_backend(config)
         if speech_backend:
             console.print(f"  Speech: [cyan]{speech_backend.backend_id}[/cyan]")
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("Speech backend discovery failed: %s", exc)
 
     # Create app
     from openjarvis.server.app import create_app
