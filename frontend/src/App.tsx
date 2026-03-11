@@ -9,7 +9,8 @@ import { AgentsPage } from './pages/AgentsPage';
 import { CommandPalette } from './components/CommandPalette';
 import { SetupScreen } from './components/SetupScreen';
 import { useAppStore } from './lib/store';
-import { fetchModels, fetchServerInfo, fetchSavings, isTauri } from './lib/api';
+import { fetchModels, fetchServerInfo, fetchSavings, submitSavings, isTauri } from './lib/api';
+import { OptInModal } from './components/OptInModal';
 
 export default function App() {
   const [setupDone, setSetupDone] = useState(!isTauri());
@@ -23,6 +24,14 @@ export default function App() {
   const settings = useAppStore((s) => s.settings);
   const commandPaletteOpen = useAppStore((s) => s.commandPaletteOpen);
   const setCommandPaletteOpen = useAppStore((s) => s.setCommandPaletteOpen);
+  const optInEnabled = useAppStore((s) => s.optInEnabled);
+  const optInDisplayName = useAppStore((s) => s.optInDisplayName);
+  const optInAnonId = useAppStore((s) => s.optInAnonId);
+  const optInModalSeen = useAppStore((s) => s.optInModalSeen);
+  const optInModalOpen = useAppStore((s) => s.optInModalOpen);
+  const setOptInModalOpen = useAppStore((s) => s.setOptInModalOpen);
+  const markOptInModalSeen = useAppStore((s) => s.markOptInModalSeen);
+  const savings = useAppStore((s) => s.savings);
 
   // Apply theme class to <html>
   useEffect(() => {
@@ -48,12 +57,40 @@ export default function App() {
     fetchServerInfo().then(setServerInfo).catch(() => {});
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Poll savings
+  // Poll savings and optionally share to Supabase
   useEffect(() => {
-    const refresh = () => fetchSavings().then(setSavings).catch(() => {});
+    const refresh = () =>
+      fetchSavings()
+        .then((data) => {
+          setSavings(data);
+          if (optInEnabled && optInDisplayName && data) {
+            const dollarSavings = data.per_provider.reduce(
+              (sum, p) => sum + p.total_cost,
+              0,
+            );
+            submitSavings({
+              anon_id: optInAnonId,
+              display_name: optInDisplayName,
+              total_calls: data.total_calls,
+              total_tokens: data.total_tokens,
+              dollar_savings: dollarSavings,
+              energy_wh_saved: 0,
+              flops_saved: 0,
+            });
+          }
+        })
+        .catch(() => {});
     refresh();
     const interval = setInterval(refresh, 30000);
     return () => clearInterval(interval);
+  }, [optInEnabled, optInDisplayName, optInAnonId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Show opt-in modal on first visit
+  useEffect(() => {
+    if (!optInModalSeen) {
+      setOptInModalOpen(true);
+      markOptInModalSeen();
+    }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggleSystemPanel = useAppStore((s) => s.toggleSystemPanel);
@@ -90,6 +127,9 @@ export default function App() {
         </Route>
       </Routes>
       {commandPaletteOpen && <CommandPalette />}
+      {optInModalOpen && (
+        <OptInModal onClose={() => setOptInModalOpen(false)} />
+      )}
     </>
   );
 }

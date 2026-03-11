@@ -1,5 +1,12 @@
 import type { ModelInfo, SavingsData, ServerInfo } from '../types';
 
+// ---------------------------------------------------------------------------
+// Supabase config — safe to embed (RLS protects writes)
+// ---------------------------------------------------------------------------
+
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+
 declare global {
   interface Window {
     __TAURI_INTERNALS__?: unknown;
@@ -306,4 +313,40 @@ export async function fetchTemplates(): Promise<AgentTemplate[]> {
   if (!res.ok) throw new Error(`Failed: ${res.status}`);
   const data = await res.json();
   return data.templates || [];
+}
+
+// ---------------------------------------------------------------------------
+// Leaderboard savings submission (Supabase)
+// ---------------------------------------------------------------------------
+
+export interface SavingsSubmission {
+  anon_id: string;
+  display_name: string;
+  total_calls: number;
+  total_tokens: number;
+  dollar_savings: number;
+  energy_wh_saved: number;
+  flops_saved: number;
+}
+
+export async function submitSavings(data: SavingsSubmission): Promise<boolean> {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return false;
+  try {
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/savings_entries`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: SUPABASE_ANON_KEY,
+          Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+          Prefer: 'resolution=merge-duplicates',
+        },
+        body: JSON.stringify(data),
+      },
+    );
+    return res.ok || res.status === 201 || res.status === 200;
+  } catch {
+    return false;
+  }
 }
