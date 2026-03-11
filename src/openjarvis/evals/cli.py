@@ -523,7 +523,9 @@ def _run_agentic(
     if hasattr(dataset, "verify_requirements"):
         issues = dataset.verify_requirements()
         if issues:
-            console.print("\n[bold red]Cannot start evaluation — requirements not met:[/bold red]")
+            console.print(
+                "\n[bold red]Cannot start evaluation — requirements not met:[/bold red]"
+            )
             for issue in issues:
                 console.print(f"[red]  • {issue}[/red]")
             raise click.ClickException(
