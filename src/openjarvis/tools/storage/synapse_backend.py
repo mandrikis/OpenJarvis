@@ -102,8 +102,14 @@ class SynapseMemory(MemoryBackend):
 
         Example::
 
-            backend.emit("learn", {"content": "User prefers dark mode", "source": "stated"})
-            backend.emit("archive_session", {"session_id": "s1", "summary": "Discussed Rust"})
+            backend.emit(
+                "learn",
+                {"content": "User prefers dark mode", "source": "stated"},
+            )
+            backend.emit(
+                "archive_session",
+                {"session_id": "s1", "summary": "Discussed Rust"},
+            )
         """
         raw = self._rust_impl.emit(event, json.dumps(payload))
         return json.loads(raw)
