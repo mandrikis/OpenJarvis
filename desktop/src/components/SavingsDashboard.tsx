@@ -320,9 +320,13 @@ export function SavingsDashboard({ apiUrl }: { apiUrl: string }) {
   // Share savings to Supabase when opted in and data changes
   useEffect(() => {
     if (!optInEnabled || !displayName || !data) return;
-    const dollarSavings = data.per_provider.reduce((s, p) => s + p.total_cost, 0);
-    const energySaved = data.per_provider.reduce((s, p) => s + (p.energy_wh || 0), 0);
-    const flopsSaved = data.per_provider.reduce((s, p) => s + (p.flops || 0), 0);
+    const best = data.per_provider.reduce(
+      (max, p) => (p.total_cost > max.total_cost ? p : max),
+      data.per_provider[0],
+    );
+    const dollarSavings = best.total_cost;
+    const energySaved = best.energy_wh || 0;
+    const flopsSaved = best.flops || 0;
     invoke('submit_savings', {
       supabaseUrl: SUPABASE_URL,
       supabaseKey: SUPABASE_KEY,

@@ -67,18 +67,13 @@ export default function App() {
         .then((data) => {
           setSavings(data);
           if (optInEnabled && optInDisplayName && data) {
-            const dollarSavings = data.per_provider.reduce(
-              (sum, p) => sum + p.total_cost,
-              0,
+            const best = data.per_provider.reduce(
+              (max, p) => (p.total_cost > max.total_cost ? p : max),
+              data.per_provider[0],
             );
-            const energySaved = data.per_provider.reduce(
-              (sum, p) => sum + (p.energy_wh || 0),
-              0,
-            );
-            const flopsSaved = data.per_provider.reduce(
-              (sum, p) => sum + (p.flops || 0),
-              0,
-            );
+            const dollarSavings = best.total_cost;
+            const energySaved = best.energy_wh || 0;
+            const flopsSaved = best.flops || 0;
             submitSavings({
               anon_id: optInAnonId,
               display_name: optInDisplayName,

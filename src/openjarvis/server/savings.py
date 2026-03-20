@@ -1,7 +1,7 @@
 """Savings calculation — compare local inference cost against cloud providers.
 
-FLOPs and energy use a no-KV-cache model: P * N * (N+1) where P = params,
-N = total tokens. This reflects full recompute without cached attention.
+FLOPs use the standard 2*P*N approximation (matching telemetry/flops.py)
+where P = model parameters, N = total tokens.
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ from typing import Any, Dict, List
 
 # ---------------------------------------------------------------------------
 # Cloud provider pricing (USD per 1M tokens)
-# params_b: model size in billions, for no-KV-cache FLOPs
+# params_b: estimated model size in billions, for FLOPs calculation
 # ---------------------------------------------------------------------------
 
 CLOUD_PRICING: Dict[str, Dict[str, float]] = {
@@ -21,27 +21,24 @@ CLOUD_PRICING: Dict[str, Dict[str, float]] = {
         "output_per_1m": 10.00,
         "label": "GPT-5.3",
         "provider": "OpenAI",
-        "params_b": 200.0,
         "energy_wh_per_1k_tokens": 0.4,
-        "flops_per_token": 3.0e12,
+        "params_b": 200.0,
     },
     "claude-opus-4.6": {
         "input_per_1m": 5.00,
         "output_per_1m": 25.00,
         "label": "Claude Opus 4.6",
         "provider": "Anthropic",
-        "params_b": 137.0,
         "energy_wh_per_1k_tokens": 0.5,
-        "flops_per_token": 4.0e12,
+        "params_b": 137.0,
     },
     "gemini-3.1-pro": {
         "input_per_1m": 2.00,
         "output_per_1m": 12.00,
         "label": "Gemini 3.1 Pro",
         "provider": "Google",
-        "params_b": 137.0,
         "energy_wh_per_1k_tokens": 0.35,
-        "flops_per_token": 2.5e12,
+        "params_b": 175.0,
     },
 }
 
@@ -97,23 +94,8 @@ def compute_savings(
         input_cost = (prompt_tokens / 1_000_000) * pricing["input_per_1m"]
         output_cost = (completion_tokens / 1_000_000) * pricing["output_per_1m"]
         total_cost = input_cost + output_cost
-
-        # No-KV-cache FLOPs: P * N * (N+1)
-        params_b = pricing.get("params_b", 200.0)
-        params = params_b * 1e9
-        flops = (
-            params * total_tokens * (total_tokens + 1)
-            if total_tokens > 0 else 0.0
-        )
-        # Scale energy by same ratio as FLOPs (energy ∝ compute)
-        flops_with_cache = (
-            total_tokens * pricing.get("flops_per_token", 3e12)
-            if total_tokens > 0 else 0.0
-        )
-        scale = (flops / flops_with_cache) if flops_with_cache > 0 else 1.0
-        energy_wh = (
-            (total_tokens / 1000) * pricing["energy_wh_per_1k_tokens"] * scale
-        )
+        energy_wh = (total_tokens / 1000) * pricing["energy_wh_per_1k_tokens"]
+        flops = 2.0 * pricing["params_b"] * 1e9 * total_tokens
 
         providers.append(ProviderSavings(
             provider=key,
