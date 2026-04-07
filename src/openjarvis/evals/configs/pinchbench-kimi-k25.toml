@@ -1,19 +1,13 @@
-# PinchBench eval: Kimi-K2.5 (Ollama, IQ4_XS GGUF)
-# Agent: native_openhands -- all PinchBench-required tools enabled
-# Pull model: ollama pull hf.co/unsloth/Kimi-K2.5-GGUF:IQ4_XS
-#
-# WARNING: Kimi-K2.5 is a 1T-param MoE (32B active). ALL GGUF quants are
-# sharded (smallest is 240 GB), and Ollama does not support sharded GGUFs
-# yet (see github.com/ollama/ollama/issues/5245). This config is a
-# placeholder -- use vLLM or wait for Ollama sharded GGUF support.
-# The IQ4_XS GGUF is 547 GB and would require 7x H100 80GB GPUs.
+# PinchBench eval: Kimi-K2.5 (llamacpp, 2x GPU)
+# Agent: native_openhands — all PinchBench-required tools enabled
+# Kimi-K2.5 thinking mode: temperature=1.0
 
 [meta]
 name = "pinchbench-kimi-k25"
-description = "PinchBench on Kimi-K2.5 IQ4_XS via Ollama"
+description = "PinchBench on moonshotai/Kimi-K2.5 (llamacpp, 2x GPU)"
 
 [defaults]
-temperature = 0.6
+temperature = 1.0
 max_tokens = 8192
 
 [judge]
@@ -23,15 +17,13 @@ engine = "cloud"
 
 [run]
 max_workers = 1
-output_dir = "results/neurips-2026/baselines/kimi-k25-ollama/pinchbench/"
+output_dir = "results/neurips-2026/baselines/kimi-k25/pinchbench/"
 seed = 42
 
 [[models]]
-name = "hf.co/unsloth/Kimi-K2.5-GGUF:IQ4_XS"
-engine = "ollama"
-param_count_b = 1000.0
-active_params_b = 32.0
-num_gpus = 7
+name = "moonshotai/Kimi-K2.5"
+engine = "llamacpp"
+num_gpus = 2
 
 [[benchmarks]]
 name = "pinchbench"
