@@ -184,6 +184,16 @@ Key comparisons:
 - [ ] Tool selection optimization: find minimal effective tool sets
 - [ ] Evaluate optimized agents on all 9 models × fast benchmarks
 
+### Phase 2c: Harness distillation (NEW)
+Root-cause-driven harness optimization via frontier model diagnosis.
+See [distillation-experiment-plan.md](distillation-experiment-plan.md) for full details.
+- [ ] Seed feedback on 20+ traces per model (from baseline eval scores)
+- [ ] Distillation standalone: 3 models (Qwen-2B, 9B, 27B) × 3 fast benchmarks
+- [ ] Head-to-head: GEPA vs DSPy vs Distillation (matched $10 cost budget)
+- [ ] Stacking: Distillation+GEPA, Distillation+LoRA, Distillation+GEPA+LoRA
+- [ ] Edit-type attribution analysis (which knobs matter most?)
+- [ ] Cost-efficiency frontier (Δ accuracy vs optimization $)
+
 ### Phase 2b: Intelligence optimization
 Training data:
 - GeneralThought-430K-filtered (reasoning traces)
