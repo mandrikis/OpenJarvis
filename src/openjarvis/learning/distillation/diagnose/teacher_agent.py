@@ -23,6 +23,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
+from openjarvis.core.types import Message, Role, ToolCall
 from openjarvis.learning.distillation.diagnose.types import (
     DiagnosticTool,
     ToolCallRecord,
@@ -94,10 +95,10 @@ class TeacherAgent:
         TeacherAgentResult
             The teacher's final content, cost, and tool call records.
         """
-        messages: list[dict[str, Any]] = []
+        messages: list[Message] = []
         if system_prompt:
-            messages.append({"role": "system", "content": system_prompt})
-        messages.append({"role": "user", "content": user_prompt})
+            messages.append(Message(role=Role.SYSTEM, content=system_prompt))
+        messages.append(Message(role=Role.USER, content=user_prompt))
 
         total_cost = 0.0
         total_tokens = 0
@@ -133,20 +134,34 @@ class TeacherAgent:
                     tool_call_records=tool_call_records,
                 )
 
+            # Convert raw tool calls to ToolCall objects
+            tool_call_objs = []
+            for tc in raw_tool_calls:
+                tc_obj = ToolCall(
+                    id=tc["id"] if isinstance(tc, dict) else tc.id,
+                    name=tc["name"] if isinstance(tc, dict) else tc.name,
+                    arguments=(
+                        tc.get("arguments", "{}")
+                        if isinstance(tc, dict)
+                        else tc.arguments
+                    ),
+                )
+                tool_call_objs.append(tc_obj)
+
             # Append assistant message with tool calls
             messages.append(
-                {
-                    "role": "assistant",
-                    "content": content,
-                    "tool_calls": raw_tool_calls,
-                }
+                Message(
+                    role=Role.ASSISTANT,
+                    content=content,
+                    tool_calls=tool_call_objs,
+                )
             )
 
             # Execute each tool call
-            for tc in raw_tool_calls:
-                tc_name = tc["name"]
-                tc_id = tc["id"]
-                tc_args_str = tc.get("arguments", "{}")
+            for tc in tool_call_objs:
+                tc_name = tc.name
+                tc_id = tc.id
+                tc_args_str = tc.arguments
 
                 try:
                     tc_args = json.loads(tc_args_str)
@@ -178,12 +193,12 @@ class TeacherAgent:
 
                 # Append tool result message
                 messages.append(
-                    {
-                        "role": "tool",
-                        "tool_call_id": tc_id,
-                        "name": tc_name,
-                        "content": tool_result,
-                    }
+                    Message(
+                        role=Role.TOOL,
+                        content=tool_result,
+                        tool_call_id=tc_id,
+                        name=tc_name,
+                    )
                 )
 
             # Check cost budget
