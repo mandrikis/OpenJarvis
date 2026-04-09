@@ -31,8 +31,7 @@ def _make_trace_store(count: int = 0, high_feedback_count: int = 0) -> MagicMock
     store.count.return_value = count
     # list_traces returns traces with high feedback
     high_traces = [
-        _StubTrace(trace_id=f"t{i}", feedback=0.9)
-        for i in range(high_feedback_count)
+        _StubTrace(trace_id=f"t{i}", feedback=0.9) for i in range(high_feedback_count)
     ]
     store.list_traces.return_value = high_traces
     return store
@@ -79,9 +78,7 @@ class TestCheckBenchmarkReady:
         )
 
         store = _make_trace_store(count=30, high_feedback_count=0)
-        result = check_benchmark_ready(
-            store, min_feedback=0.7, min_samples=10
-        )
+        result = check_benchmark_ready(store, min_feedback=0.7, min_samples=10)
         assert not result.ready
         assert "benchmark" in result.message.lower()
 
@@ -91,9 +88,7 @@ class TestCheckBenchmarkReady:
         )
 
         store = _make_trace_store(count=30, high_feedback_count=5)
-        result = check_benchmark_ready(
-            store, min_feedback=0.7, min_samples=10
-        )
+        result = check_benchmark_ready(store, min_feedback=0.7, min_samples=10)
         assert not result.ready
 
     def test_ready_with_enough_high_feedback_traces(self) -> None:
@@ -102,7 +97,5 @@ class TestCheckBenchmarkReady:
         )
 
         store = _make_trace_store(count=30, high_feedback_count=15)
-        result = check_benchmark_ready(
-            store, min_feedback=0.7, min_samples=10
-        )
+        result = check_benchmark_ready(store, min_feedback=0.7, min_samples=10)
         assert result.ready
