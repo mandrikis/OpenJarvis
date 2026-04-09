@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -232,4 +232,90 @@ class LearningPlan(BaseModel):
     created_at: datetime = Field(
         ...,
         description="When the plan was finalized.",
+    )
+
+
+# ---------------------------------------------------------------------------
+# BenchmarkSnapshot — one personal-benchmark run result
+# ---------------------------------------------------------------------------
+
+
+class BenchmarkSnapshot(BaseModel):
+    """A point-in-time score from running the personal benchmark.
+
+    Two of these live on every LearningSession: one captured before any edits
+    apply, one captured after. The version is locked at session start so the
+    delta is interpretable even if the benchmark is refreshed mid-session.
+
+    See spec §4.3 and §9.
+    """
+
+    benchmark_version: str = Field(
+        ...,
+        description="Personal benchmark version (e.g. 'personal_v3').",
+    )
+    overall_score: float = Field(
+        ...,
+        ge=0.0,
+        le=1.0,
+        description="Mean per-task score across the benchmark.",
+    )
+    cluster_scores: dict[str, float] = Field(
+        default_factory=dict,
+        description="Mean score per failure cluster.",
+    )
+    task_count: int = Field(
+        ...,
+        ge=0,
+        description="Number of tasks scored in this snapshot.",
+    )
+    elapsed_seconds: float = Field(
+        ...,
+        ge=0.0,
+        description="Wall-clock time of the benchmark run.",
+    )
+
+
+# ---------------------------------------------------------------------------
+# EditOutcome — what happened when one edit was processed
+# ---------------------------------------------------------------------------
+
+
+EditOutcomeStatus = Literal[
+    "applied",
+    "rejected_by_gate",
+    "pending_review",
+    "rejected_by_user",
+    "rolled_back",
+    "skipped",
+]
+
+
+class EditOutcome(BaseModel):
+    """Result of attempting to apply one Edit.
+
+    Persisted both in the SessionStore SQLite table and as part of the
+    session.json artifact. The status literal is the canonical lifecycle for
+    each edit.
+
+    See spec §4.3.
+    """
+
+    edit_id: str
+    status: EditOutcomeStatus
+    benchmark_delta: float | None = Field(
+        default=None,
+        description="Overall score change from this edit. None if not gated.",
+    )
+    cluster_deltas: dict[str, float] = Field(
+        default_factory=dict,
+        description="Per-cluster score change from this edit.",
+    )
+    error: str | None = Field(
+        default=None,
+        description="Error message if the edit was rejected or failed.",
+    )
+    applied_at: datetime | None = Field(
+        default=None,
+        description="When the edit was committed to the checkpoint repo.",
     )

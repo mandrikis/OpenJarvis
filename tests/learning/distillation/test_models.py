@@ -362,3 +362,127 @@ class TestLearningPlan:
 
         with pytest.raises(ValidationError):
             LearningPlan(**kwargs)
+
+
+# ---------------------------------------------------------------------------
+# BenchmarkSnapshot
+# ---------------------------------------------------------------------------
+
+
+class TestBenchmarkSnapshot:
+    """Tests for BenchmarkSnapshot pydantic model."""
+
+    def _valid_snapshot_kwargs(self) -> dict:
+        return {
+            "benchmark_version": "personal_v3",
+            "overall_score": 0.72,
+            "cluster_scores": {"cluster-001": 0.65, "cluster-002": 0.80},
+            "task_count": 50,
+            "elapsed_seconds": 184.3,
+        }
+
+    def test_constructs_with_valid_fields(self) -> None:
+        from openjarvis.learning.distillation.models import BenchmarkSnapshot
+
+        snap = BenchmarkSnapshot(**self._valid_snapshot_kwargs())
+
+        assert snap.benchmark_version == "personal_v3"
+        assert snap.overall_score == 0.72
+        assert snap.cluster_scores["cluster-001"] == 0.65
+        assert snap.task_count == 50
+        assert snap.elapsed_seconds == 184.3
+
+    def test_round_trip_via_json(self) -> None:
+        from openjarvis.learning.distillation.models import BenchmarkSnapshot
+
+        snap = BenchmarkSnapshot(**self._valid_snapshot_kwargs())
+        restored = BenchmarkSnapshot.model_validate_json(snap.model_dump_json())
+
+        assert restored == snap
+
+    def test_score_bounds(self) -> None:
+        import pytest
+        from pydantic import ValidationError
+
+        from openjarvis.learning.distillation.models import BenchmarkSnapshot
+
+        kwargs = self._valid_snapshot_kwargs()
+        kwargs["overall_score"] = 1.5
+
+        with pytest.raises(ValidationError):
+            BenchmarkSnapshot(**kwargs)
+
+    def test_task_count_must_be_non_negative(self) -> None:
+        import pytest
+        from pydantic import ValidationError
+
+        from openjarvis.learning.distillation.models import BenchmarkSnapshot
+
+        kwargs = self._valid_snapshot_kwargs()
+        kwargs["task_count"] = -1
+
+        with pytest.raises(ValidationError):
+            BenchmarkSnapshot(**kwargs)
+
+
+# ---------------------------------------------------------------------------
+# EditOutcome
+# ---------------------------------------------------------------------------
+
+
+class TestEditOutcome:
+    """Tests for EditOutcome pydantic model."""
+
+    def _valid_outcome_kwargs(self) -> dict:
+        from datetime import datetime, timezone
+
+        return {
+            "edit_id": "edit-001",
+            "status": "applied",
+            "benchmark_delta": 0.04,
+            "cluster_deltas": {"cluster-001": 0.10, "cluster-002": 0.0},
+            "error": None,
+            "applied_at": datetime(2026, 4, 8, 14, 25, 0, tzinfo=timezone.utc),
+        }
+
+    def test_applied_outcome(self) -> None:
+        from openjarvis.learning.distillation.models import EditOutcome
+
+        outcome = EditOutcome(**self._valid_outcome_kwargs())
+        assert outcome.status == "applied"
+        assert outcome.benchmark_delta == 0.04
+
+    def test_rejected_outcome_has_no_applied_at(self) -> None:
+        from openjarvis.learning.distillation.models import EditOutcome
+
+        outcome = EditOutcome(
+            edit_id="edit-002",
+            status="rejected_by_gate",
+            benchmark_delta=-0.02,
+            cluster_deltas={},
+            error="regression: cluster-001 dropped 0.06",
+            applied_at=None,
+        )
+        assert outcome.status == "rejected_by_gate"
+        assert outcome.applied_at is None
+        assert outcome.error is not None
+
+    def test_status_must_be_valid_literal(self) -> None:
+        import pytest
+        from pydantic import ValidationError
+
+        from openjarvis.learning.distillation.models import EditOutcome
+
+        kwargs = self._valid_outcome_kwargs()
+        kwargs["status"] = "totally_made_up"
+
+        with pytest.raises(ValidationError):
+            EditOutcome(**kwargs)
+
+    def test_round_trip_via_json(self) -> None:
+        from openjarvis.learning.distillation.models import EditOutcome
+
+        outcome = EditOutcome(**self._valid_outcome_kwargs())
+        restored = EditOutcome.model_validate_json(outcome.model_dump_json())
+
+        assert restored == outcome
