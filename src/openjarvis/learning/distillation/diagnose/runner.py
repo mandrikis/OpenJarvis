@@ -230,8 +230,12 @@ class DiagnosisRunner:
         fallback_prompt = (
             "Your diagnosis did not include the required JSON cluster array. "
             "Here is your diagnosis:\n\n"
-            f"{diagnosis}\n\n"
-            "Now output ONLY a JSON array of failure clusters. No other text."
+            f"{diagnosis[:3000]}\n\n"
+            "Now output ONLY a raw JSON array of failure clusters. "
+            "Each object must have: id, description, sample_trace_ids, "
+            "student_failure_rate (float 0-1), teacher_success_rate (float 0-1), "
+            "skill_gap. Output ONLY the JSON array — no markdown, no code "
+            "fences, no explanation, no other text."
         )
 
         fallback_agent = TeacherAgent(
