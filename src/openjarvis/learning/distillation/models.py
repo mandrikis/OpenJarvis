@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
+from pathlib import Path
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
@@ -318,4 +319,54 @@ class EditOutcome(BaseModel):
     applied_at: datetime | None = Field(
         default=None,
         description="When the edit was committed to the checkpoint repo.",
+    )
+
+
+# ---------------------------------------------------------------------------
+# LearningSession — durable record of one full diagnose→record loop
+# ---------------------------------------------------------------------------
+
+
+class LearningSession(BaseModel):
+    """The durable record of one distillation session.
+
+    Persisted in two places: `<session_dir>/session.json` (authoritative) and
+    the SQLite SessionStore (queryable index). When in doubt, prefer the JSON
+    file — SQLite can be rebuilt from the JSON files.
+
+    See spec §4.3, §7.7 (status transitions), §8.
+    """
+
+    id: str
+    parent_session_id: str | None = Field(
+        default=None,
+        description="Id of the session this one is a follow-up to, if any.",
+    )
+    trigger: TriggerKind
+    trigger_metadata: dict[str, Any] = Field(default_factory=dict)
+    status: SessionStatus
+    autonomy_mode: AutonomyMode
+    started_at: datetime
+    ended_at: datetime | None = None
+    diagnosis_path: Path
+    plan_path: Path
+    benchmark_before: BenchmarkSnapshot
+    benchmark_after: BenchmarkSnapshot | None = None
+    edit_outcomes: list[EditOutcome] = Field(default_factory=list)
+    git_checkpoint_pre: str = Field(
+        ...,
+        description="Commit sha at session start (baseline commit).",
+    )
+    git_checkpoint_post: str | None = Field(
+        default=None,
+        description="Commit sha after edits applied; None until executing finishes.",
+    )
+    teacher_cost_usd: float = Field(
+        ...,
+        ge=0.0,
+        description="Accumulated teacher API spend for this session.",
+    )
+    error: str | None = Field(
+        default=None,
+        description="If status is FAILED, the error message that caused it.",
     )

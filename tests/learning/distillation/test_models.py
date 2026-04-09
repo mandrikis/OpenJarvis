@@ -486,3 +486,101 @@ class TestEditOutcome:
         restored = EditOutcome.model_validate_json(outcome.model_dump_json())
 
         assert restored == outcome
+
+
+# ---------------------------------------------------------------------------
+# LearningSession
+# ---------------------------------------------------------------------------
+
+
+class TestLearningSession:
+    """Tests for LearningSession pydantic model."""
+
+    def _valid_session_kwargs(self) -> dict:
+        from datetime import datetime, timezone
+        from pathlib import Path
+
+        from openjarvis.learning.distillation.models import (
+            AutonomyMode,
+            BenchmarkSnapshot,
+            SessionStatus,
+            TriggerKind,
+        )
+
+        snap = BenchmarkSnapshot(
+            benchmark_version="personal_v1",
+            overall_score=0.65,
+            cluster_scores={"cluster-001": 0.50},
+            task_count=30,
+            elapsed_seconds=92.0,
+        )
+        return {
+            "id": "session-001",
+            "parent_session_id": None,
+            "trigger": TriggerKind.SCHEDULED,
+            "trigger_metadata": {"cron": "0 3 * * *"},
+            "status": SessionStatus.INITIATED,
+            "autonomy_mode": AutonomyMode.TIERED,
+            "started_at": datetime(2026, 4, 8, 3, 0, 0, tzinfo=timezone.utc),
+            "ended_at": None,
+            "diagnosis_path": Path("/tmp/sessions/session-001/diagnosis.md"),
+            "plan_path": Path("/tmp/sessions/session-001/plan.json"),
+            "benchmark_before": snap,
+            "benchmark_after": None,
+            "edit_outcomes": [],
+            "git_checkpoint_pre": "abc1234",
+            "git_checkpoint_post": None,
+            "teacher_cost_usd": 0.0,
+            "error": None,
+        }
+
+    def test_constructs_with_valid_fields(self) -> None:
+        from openjarvis.learning.distillation.models import LearningSession
+
+        session = LearningSession(**self._valid_session_kwargs())
+        assert session.id == "session-001"
+        assert session.parent_session_id is None
+        assert session.git_checkpoint_pre == "abc1234"
+        assert session.benchmark_after is None
+
+    def test_round_trip_via_json(self) -> None:
+        from openjarvis.learning.distillation.models import LearningSession
+
+        session = LearningSession(**self._valid_session_kwargs())
+        as_json = session.model_dump_json()
+        restored = LearningSession.model_validate_json(as_json)
+
+        assert restored == session
+
+    def test_supports_parent_session_chain(self) -> None:
+        from openjarvis.learning.distillation.models import LearningSession
+
+        kwargs = self._valid_session_kwargs()
+        kwargs["parent_session_id"] = "session-000"
+
+        session = LearningSession(**kwargs)
+        assert session.parent_session_id == "session-000"
+
+    def test_status_must_be_valid_enum(self) -> None:
+        import pytest
+        from pydantic import ValidationError
+
+        from openjarvis.learning.distillation.models import LearningSession
+
+        kwargs = self._valid_session_kwargs()
+        kwargs["status"] = "not_a_status"
+
+        with pytest.raises(ValidationError):
+            LearningSession(**kwargs)
+
+    def test_teacher_cost_must_be_non_negative(self) -> None:
+        import pytest
+        from pydantic import ValidationError
+
+        from openjarvis.learning.distillation.models import LearningSession
+
+        kwargs = self._valid_session_kwargs()
+        kwargs["teacher_cost_usd"] = -0.01
+
+        with pytest.raises(ValidationError):
+            LearningSession(**kwargs)
