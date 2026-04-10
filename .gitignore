@@ -98,3 +98,10 @@ MagicMock/
 # Second Repos
 Inline/
 scratch/
+
+# SQLite in-memory artifacts
+:memory:
+MagicMock/
+
+# Second Repos
+Inline/

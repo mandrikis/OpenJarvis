@@ -26,6 +26,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next):  # noqa: ANN001
         if self._api_key and self._requires_auth(request.url.path):
+        if self._api_key and self._requires_auth(request.url.path):
             auth = request.headers.get("Authorization", "")
             if not auth:
                 return JSONResponse(
@@ -44,6 +45,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
     def _requires_auth(path: str) -> bool:
         """Only protect API routes, not the frontend UI or static assets."""
         return path.startswith("/v1/") or path.startswith("/api/")
+
 
 
 def generate_api_key() -> str:
