@@ -1,7 +1,7 @@
 # Distillation Experiment Config
 # Experiment: exp1a-teacher/qwen397b-tc15-C1
 # Teacher: Qwen/Qwen3.5-397B-A17B-FP8 (local)
-# Student: qwen3.5:9b (ollama)
+# Student: Qwen/Qwen3.5-9B (vllm)
 # Benchmark: toolcall15
 # Data config: C1 — Zero test data — external traces only (GeneralThought + ADP)
 # Budget: standard (15 tool calls, $2.00)
@@ -12,10 +12,13 @@
 # Requires 8×H100, vLLM serve on port 8010
 
 [intelligence]
-default_model = "qwen3.5:9b"
+default_model = "Qwen/Qwen3.5-9B"
 
 [engine]
-default = "ollama"
+default = "vllm"
+
+[engine.vllm]
+host = "http://localhost:8001"
 
 [learning.distillation]
 enabled = true

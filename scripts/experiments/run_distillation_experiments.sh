@@ -3,13 +3,17 @@
 # Run distillation ablation experiments
 #
 # Prerequisites:
-#   - Ollama running with qwen3.5:{2b,9b,27b}
 #   - ANTHROPIC_API_KEY set (for Opus teacher)
 #   - OPENAI_API_KEY set (for GPT-5.4 teacher)
 #   - GOOGLE_API_KEY set (for Gemini teacher)
 #   - For Qwen-397B teacher: vLLM serving on port 8010 with 8×H100
 #   - Traces seeded with feedback (run A1 blocker first)
 #   - jarvis learning init already run
+#
+# Note: in the current M1 runner the student is a MagicMock and is not
+# actually invoked by the orchestrator, so no student serving layer is
+# required. If students are made real (M2), run vLLM on ports 8000/8001/8002
+# for Qwen3.5-2B / 9B / 27B-FP8 respectively (matching the generated configs).
 #
 # Usage:
 #   bash scripts/experiments/run_distillation_experiments.sh               # Run all
@@ -51,16 +55,11 @@ check_prereqs() {
         warn "GOOGLE_API_KEY not set — Gemini teacher experiments will fail"
     fi
 
-    # Check Ollama
-    if ! ollama list &>/dev/null; then
-        fail "Ollama not running. Start it first."
-        exit 1
-    fi
-
-    # Check student models
-    for model in qwen3.5:2b qwen3.5:9b qwen3.5:27b; do
-        if ! ollama list 2>/dev/null | grep -q "$model"; then
-            warn "Model $model not found in Ollama. Pull with: ollama pull $model"
+    # Check vLLM student servers (non-fatal — M1 student is mocked)
+    # Expected layout: 2B on :8000, 9B on :8001, 27B-FP8 on :8002
+    for port in 8000 8001 8002; do
+        if ! curl -sf "http://localhost:${port}/v1/models" >/dev/null 2>&1; then
+            warn "vLLM student server on port ${port} not responding (OK for M1 — student is mocked)"
         fi
     done
 
@@ -131,8 +130,8 @@ run_session() {
         # Run the distillation session via Python
         # (jarvis learning run doesn't support all config params yet,
         #  so we call the orchestrator directly)
-        uv run python << PYEOF > "${session_output}/run.log" 2>&1 || true
-import json, shutil, sys
+        .venv/bin/python << PYEOF > "${session_output}/run.log" 2>&1 || true
+import json, os, shutil, sys
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -144,7 +143,9 @@ from openjarvis.learning.distillation.orchestrator import DistillationOrchestrat
 from openjarvis.learning.distillation.storage.session_store import SessionStore
 from openjarvis.learning.distillation.triggers import OnDemandTrigger
 
-home = Path.home() / ".openjarvis"
+# Respect OPENJARVIS_HOME so M1 runs can be isolated from the canonical
+# ~/.openjarvis (which may be on a shared filesystem with other writers).
+home = Path(os.environ.get("OPENJARVIS_HOME", str(Path.home() / ".openjarvis")))
 
 # Read config params
 teacher_model = "${teacher_model}"

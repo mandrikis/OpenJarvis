@@ -1,7 +1,7 @@
 # Distillation Experiment Config
 # Experiment: exp1c-student/opus-27b-pb-C2
 # Teacher: claude-opus-4-6 (anthropic)
-# Student: qwen3.5:27b (ollama)
+# Student: Qwen/Qwen3.5-27B-FP8 (vllm)
 # Benchmark: pinchbench
 # Data config: C2 — Test queries only — benchmark traces visible, answers hidden
 # Budget: standard (15 tool calls, $2.00)
@@ -11,10 +11,13 @@
 
 
 [intelligence]
-default_model = "qwen3.5:27b"
+default_model = "Qwen/Qwen3.5-27B-FP8"
 
 [engine]
-default = "ollama"
+default = "vllm"
+
+[engine.vllm]
+host = "http://localhost:8002"
 
 [learning.distillation]
 enabled = true

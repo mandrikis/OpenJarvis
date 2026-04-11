@@ -1,7 +1,7 @@
 # Distillation Experiment Config
 # Experiment: exp1b-budget/minimal-tb-C2
 # Teacher: claude-opus-4-6 (anthropic)
-# Student: qwen3.5:9b (ollama)
+# Student: Qwen/Qwen3.5-9B (vllm)
 # Benchmark: taubench
 # Data config: C2 — Test queries only — benchmark traces visible, answers hidden
 # Budget: minimal (5 tool calls, $0.50)
@@ -11,10 +11,13 @@
 
 
 [intelligence]
-default_model = "qwen3.5:9b"
+default_model = "Qwen/Qwen3.5-9B"
 
 [engine]
-default = "ollama"
+default = "vllm"
+
+[engine.vllm]
+host = "http://localhost:8001"
 
 [learning.distillation]
 enabled = true

@@ -1,7 +1,7 @@
 # Distillation Experiment Config
 # Experiment: exp3a-iterative/iter1-tc15
 # Teacher: claude-opus-4-6 (anthropic)
-# Student: qwen3.5:9b (ollama)
+# Student: Qwen/Qwen3.5-9B (vllm)
 # Benchmark: toolcall15
 # Data config: C2 — Test queries only — benchmark traces visible, answers hidden
 # Budget: standard (15 tool calls, $2.00)
@@ -11,10 +11,13 @@
 
 
 [intelligence]
-default_model = "qwen3.5:9b"
+default_model = "Qwen/Qwen3.5-9B"
 
 [engine]
-default = "ollama"
+default = "vllm"
+
+[engine.vllm]
+host = "http://localhost:8001"
 
 [learning.distillation]
 enabled = true

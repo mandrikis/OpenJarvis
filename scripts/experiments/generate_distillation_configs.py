@@ -38,10 +38,12 @@ TEACHERS = {
 }
 
 # ── Student models ──────────────────────────────────────────────────────────
+# Served via vLLM on this H100 node. 27B uses the FP8 weights that fit on a
+# single H100; 2B and 9B use standard FP16.
 STUDENTS = {
-    "2b": {"model": "qwen3.5:2b", "engine": "ollama"},
-    "9b": {"model": "qwen3.5:9b", "engine": "ollama"},
-    "27b": {"model": "qwen3.5:27b", "engine": "ollama"},
+    "2b":  {"model": "Qwen/Qwen3.5-2B",      "engine": "vllm", "port": 8000},
+    "9b":  {"model": "Qwen/Qwen3.5-9B",      "engine": "vllm", "port": 8001},
+    "27b": {"model": "Qwen/Qwen3.5-27B-FP8", "engine": "vllm", "port": 8002},
 }
 
 # ── Benchmarks ──────────────────────────────────────────────────────────────
@@ -131,6 +133,9 @@ default_model = "{student["model"]}"
 
 [engine]
 default = "{student["engine"]}"
+
+[engine.vllm]
+host = "http://localhost:{student.get("port", 8000)}"
 
 [learning.distillation]
 enabled = true
