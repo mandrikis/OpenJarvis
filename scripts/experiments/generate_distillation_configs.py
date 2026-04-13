@@ -20,7 +20,7 @@ TEACHERS = {
         "provider": "anthropic",
     },
     "gpt54": {
-        "model": "gpt-5.4-2026-03-05",
+        "model": "gpt-5.4",
         "engine": "cloud",
         "provider": "openai",
     },

@@ -1,6 +1,6 @@
 # Distillation Experiment Config
 # Experiment: exp1a-teacher/gpt54-tc15-C2
-# Teacher: gpt-5.4-2026-03-05 (openai)
+# Teacher: gpt-5.4 (openai)
 # Student: Qwen/Qwen3.5-9B (vllm)
 # Benchmark: toolcall15
 # Data config: C2 — Test queries only — benchmark traces visible, answers hidden
@@ -22,7 +22,7 @@ host = "http://localhost:8001"
 [learning.distillation]
 enabled = true
 autonomy_mode = "auto"
-teacher_model = "gpt-5.4-2026-03-05"
+teacher_model = "gpt-5.4"
 max_cost_per_session_usd = 2.0
 max_tool_calls_per_diagnosis = 15
 

@@ -1,6 +1,6 @@
 # Distillation Experiment Config
 # Experiment: exp1a-teacher/gpt54-pb-C1
-# Teacher: gpt-5.4-2026-03-05 (openai)
+# Teacher: gpt-5.4 (openai)
 # Student: Qwen/Qwen3.5-9B (vllm)
 # Benchmark: pinchbench
 # Data config: C1 — Zero test data — external traces only (GeneralThought + ADP)
@@ -22,7 +22,7 @@ host = "http://localhost:8001"
 [learning.distillation]
 enabled = true
 autonomy_mode = "auto"
-teacher_model = "gpt-5.4-2026-03-05"
+teacher_model = "gpt-5.4"
 max_cost_per_session_usd = 2.0
 max_tool_calls_per_diagnosis = 15
 
