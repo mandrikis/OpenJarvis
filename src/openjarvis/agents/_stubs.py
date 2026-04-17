@@ -134,12 +134,26 @@ class BaseAgent(ABC):
         conversation messages, and finally the user input.
         """
         messages: list[Message] = []
+        # Check if the context already supplies a system message
+        _context_has_system = (
+            context
+            and context.conversation.messages
+            and any(m.role == Role.SYSTEM for m in context.conversation.messages)
+        )
+
         if self._prompt_builder is not None:
             effective_system_prompt = self._prompt_builder.build()
         elif system_prompt:
             effective_system_prompt = system_prompt
-        else:
+        elif _context_has_system:
             effective_system_prompt = None
+        else:
+            # Fall back to the config-level default (grounds local models)
+            try:
+                cfg = load_config()
+                effective_system_prompt = cfg.agent.default_system_prompt or None
+            except Exception:
+                effective_system_prompt = None
         if effective_system_prompt:
             messages.append(Message(role=Role.SYSTEM, content=effective_system_prompt))
         if context and context.conversation.messages:
@@ -292,6 +306,7 @@ class ToolUsingAgent(BaseAgent):
         agent_id: Optional[str] = None,
         interactive: bool = False,
         confirm_callback: Optional[Any] = None,
+        skill_few_shot_examples: Optional[List[str]] = None,
     ) -> None:
         super().__init__(
             engine,
@@ -303,6 +318,9 @@ class ToolUsingAgent(BaseAgent):
         from openjarvis.tools._stubs import ToolExecutor
 
         self._tools = tools or []
+        # Plan 2B I3: store optimized few-shot examples for agents to inject
+        # into their own system prompt templates as appropriate.
+        self._skill_few_shot_examples = list(skill_few_shot_examples or [])
         _aid = agent_id or getattr(self, "agent_id", "")
         self._executor = ToolExecutor(
             self._tools,

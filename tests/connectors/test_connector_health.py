@@ -35,7 +35,9 @@ _ALL_CONNECTORS = _LOCAL_CONNECTORS + _TOKEN_CONNECTORS
     ids=[c[0] for c in _ALL_CONNECTORS],
 )
 def test_connector_instantiates(
-    connector_id: str, module_path: str, class_name: str,
+    connector_id: str,
+    module_path: str,
+    class_name: str,
 ) -> None:
     """Every connector can be instantiated without errors."""
     import importlib
@@ -52,7 +54,9 @@ def test_connector_instantiates(
     ids=[c[0] for c in _ALL_CONNECTORS],
 )
 def test_connector_has_required_methods(
-    connector_id: str, module_path: str, class_name: str,
+    connector_id: str,
+    module_path: str,
+    class_name: str,
 ) -> None:
     """Every connector implements the BaseConnector interface."""
     import importlib
@@ -75,7 +79,9 @@ def test_connector_has_required_methods(
     ids=[c[0] for c in _TOKEN_CONNECTORS],
 )
 def test_connector_not_connected_without_creds(
-    connector_id: str, module_path: str, class_name: str,
+    connector_id: str,
+    module_path: str,
+    class_name: str,
 ) -> None:
     """Token connectors report not connected without credentials."""
     import importlib
@@ -96,7 +102,9 @@ def test_connector_not_connected_without_creds(
     ids=[c[0] for c in _ALL_CONNECTORS],
 )
 def test_connector_has_metadata(
-    connector_id: str, module_path: str, class_name: str,
+    connector_id: str,
+    module_path: str,
+    class_name: str,
 ) -> None:
     """Every connector has connector_id, display_name, and auth_type."""
     import importlib
@@ -112,7 +120,10 @@ def test_connector_has_metadata(
 
 
 def test_knowledge_store_has_data() -> None:
-    """KnowledgeStore at default path has data (if it exists)."""
+    """Assert a populated default-path KnowledgeStore has chunks and sources.
+
+    Skips if the DB is missing or has no indexed rows (fresh install / empty store).
+    """
     from openjarvis.connectors.store import KnowledgeStore
     from openjarvis.core.config import DEFAULT_CONFIG_DIR
 
@@ -121,20 +132,26 @@ def test_knowledge_store_has_data() -> None:
         pytest.skip("No knowledge.db found")
 
     store = KnowledgeStore(str(db_path))
-    count = store.count()
-    assert count > 0, "KnowledgeStore has no data"
+    try:
+        count = store.count()
+        if count == 0:
+            pytest.skip("KnowledgeStore exists but has no indexed data")
 
-    # Check sources exist
-    rows = store._conn.execute(
-        "SELECT DISTINCT source FROM knowledge_chunks"
-    ).fetchall()
-    sources = [r[0] for r in rows]
-    assert len(sources) > 0, "No sources in KnowledgeStore"
-    store.close()
+        # Check sources exist
+        rows = store._conn.execute(
+            "SELECT DISTINCT source FROM knowledge_chunks"
+        ).fetchall()
+        sources = [r[0] for r in rows]
+        assert len(sources) > 0, "No sources in KnowledgeStore"
+    finally:
+        store.close()
 
 
 def test_knowledge_store_sources_have_chunks() -> None:
-    """Each connected source has at least 1 chunk in the store."""
+    """Each source row in a populated store has at least 1 chunk.
+
+    Skips if the DB is missing or empty (same as test_knowledge_store_has_data).
+    """
     from openjarvis.connectors.store import KnowledgeStore
     from openjarvis.core.config import DEFAULT_CONFIG_DIR
 
@@ -143,12 +160,16 @@ def test_knowledge_store_sources_have_chunks() -> None:
         pytest.skip("No knowledge.db found")
 
     store = KnowledgeStore(str(db_path))
-    rows = store._conn.execute(
-        "SELECT source, COUNT(*) as n FROM knowledge_chunks "
-        "GROUP BY source ORDER BY n DESC"
-    ).fetchall()
+    try:
+        if store.count() == 0:
+            pytest.skip("KnowledgeStore exists but has no indexed data")
 
-    for source, count in rows:
-        assert count > 0, f"Source '{source}' has 0 chunks"
+        rows = store._conn.execute(
+            "SELECT source, COUNT(*) as n FROM knowledge_chunks "
+            "GROUP BY source ORDER BY n DESC"
+        ).fetchall()
 
-    store.close()
+        for source, count in rows:
+            assert count > 0, f"Source '{source}' has 0 chunks"
+    finally:
+        store.close()

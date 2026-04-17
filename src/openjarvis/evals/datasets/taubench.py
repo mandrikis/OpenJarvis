@@ -9,6 +9,7 @@ Reference: https://github.com/sierra-research/tau2-bench
 from __future__ import annotations
 
 import logging
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -40,11 +41,20 @@ def _ensure_tau2() -> None:
                 capture_output=True,
             )
         LOGGER.info("Installing tau2-bench ...")
-        subprocess.run(
-            [sys.executable, "-m", "pip", "install", "-e", str(CACHE_DIR)],
-            check=True,
-            capture_output=True,
-        )
+        # Try `python -m pip` first; fall back to `uv pip` for uv-managed venvs
+        # which don't ship pip by default.
+        try:
+            subprocess.run(
+                [sys.executable, "-m", "pip", "install", "-e", str(CACHE_DIR)],
+                check=True,
+                capture_output=True,
+            )
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            subprocess.run(
+                ["uv", "pip", "install", "--python", sys.executable, "-e", str(CACHE_DIR)],
+                check=True,
+                capture_output=True,
+            )
 
 
 class TauBenchDataset(DatasetProvider):
@@ -68,7 +78,9 @@ class TauBenchDataset(DatasetProvider):
         self._temperature: float = 0.7
         self._max_tokens: int = 4096
         self._user_model: Optional[str] = None
-        self._num_trials: int = 3  # pass^k: best of k trials per task
+        # pass^k: best of k trials per task. Default 3, override via env var
+        # OPENJARVIS_TAUBENCH_TRIALS for faster runs (e.g. =1 for 3x speedup).
+        self._num_trials: int = int(os.environ.get("OPENJARVIS_TAUBENCH_TRIALS", "3"))
         self._telemetry: bool = False
         self._gpu_metrics: bool = False
 
@@ -129,6 +141,7 @@ class TauBenchDataset(DatasetProvider):
 
             # Load tasks, filtering to test split when available
             from tau2.runner import load_task_splits
+
             try:
                 task_splits = load_task_splits(domain)
                 test_ids = (
@@ -144,12 +157,14 @@ class TauBenchDataset(DatasetProvider):
                 tasks = [t for t in tasks if str(t.id) in test_ids]
                 LOGGER.info(
                     "TauBench: loaded %d test-split tasks for domain '%s'",
-                    len(tasks), domain,
+                    len(tasks),
+                    domain,
                 )
             else:
                 LOGGER.info(
                     "TauBench: loaded %d tasks for domain '%s' (no test split)",
-                    len(tasks), domain,
+                    len(tasks),
+                    domain,
                 )
 
             for task in tasks:
@@ -206,6 +221,7 @@ class TauBenchDataset(DatasetProvider):
 
         if seed is not None:
             import random
+
             random.Random(seed).shuffle(all_records)
         if max_samples is not None:
             all_records = all_records[:max_samples]
@@ -226,6 +242,7 @@ class TauBenchDataset(DatasetProvider):
     def create_task_env(self, record: EvalRecord):
         """Create a TauBench task environment for evaluation."""
         from openjarvis.evals.execution.taubench_env import TauBenchTaskEnv
+
         return TauBenchTaskEnv(
             record,
             engine_key=self._engine_key,

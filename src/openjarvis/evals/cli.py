@@ -134,7 +134,15 @@ BENCHMARKS = {
     },
     "liveresearch": {
         "category": "agentic",
-        "description": "LiveResearchBench deep research tasks",
+        "description": "DeepResearchBench report generation (alias: deepresearch)",
+    },
+    "deepresearch": {
+        "category": "agentic",
+        "description": "DeepResearchBench deep research report generation",
+    },
+    "liveresearchbench": {
+        "category": "reasoning",
+        "description": "LiveResearchBench recent research comprehension (Salesforce)",
     },
     "toolcall15": {
         "category": "agentic",
@@ -165,6 +173,7 @@ def _build_backend(
     telemetry: bool = False,
     gpu_metrics: bool = False,
     model: Optional[str] = None,
+    max_turns: Optional[int] = None,
 ):
     """Construct the appropriate backend."""
     if backend_name == "jarvis-agent":
@@ -177,6 +186,7 @@ def _build_backend(
             telemetry=telemetry,
             gpu_metrics=gpu_metrics,
             model=model,
+            max_turns=max_turns,
         )
     else:
         from openjarvis.evals.backends.jarvis_direct import JarvisDirectBackend
@@ -326,16 +336,23 @@ def _build_dataset(benchmark: str, subset: str | None = None):
         return PinchBenchDataset(path=subset)
     elif benchmark == "taubench":
         from openjarvis.evals.datasets.taubench import TauBenchDataset
+
         domains = subset.split(",") if subset else None
         return TauBenchDataset(domains=domains)
     elif benchmark == "livecodebench":
         from openjarvis.evals.datasets.livecodebench import LiveCodeBenchDataset
 
         return LiveCodeBenchDataset()
-    elif benchmark == "liveresearch":
+    elif benchmark in ("liveresearch", "deepresearch"):
         from openjarvis.evals.datasets.liveresearch import LiveResearchBenchDataset
 
         return LiveResearchBenchDataset(path=subset)
+    elif benchmark == "liveresearchbench":
+        from openjarvis.evals.datasets.liveresearchbench import (
+            LiveResearchBenchSFDataset,
+        )
+
+        return LiveResearchBenchSFDataset()
     elif benchmark == "toolcall15":
         from openjarvis.evals.datasets.toolcall15 import ToolCall15Dataset
 
@@ -478,15 +495,22 @@ def _build_scorer(benchmark: str, judge_backend, judge_model: str):
         return PinchBenchScorer(judge_backend, judge_model)
     elif benchmark == "taubench":
         from openjarvis.evals.scorers.taubench import TauBenchScorer
+
         return TauBenchScorer(judge_backend, judge_model)
     elif benchmark == "livecodebench":
         from openjarvis.evals.scorers.livecodebench import LiveCodeBenchScorer
 
         return LiveCodeBenchScorer(judge_backend, judge_model)
-    elif benchmark == "liveresearch":
+    elif benchmark in ("liveresearch", "deepresearch"):
         from openjarvis.evals.scorers.liveresearch import LiveResearchBenchScorer
 
         return LiveResearchBenchScorer(judge_backend, judge_model)
+    elif benchmark == "liveresearchbench":
+        from openjarvis.evals.scorers.liveresearchbench import (
+            LiveResearchBenchSFScorer,
+        )
+
+        return LiveResearchBenchSFScorer(judge_backend, judge_model)
     elif benchmark == "toolcall15":
         from openjarvis.evals.scorers.toolcall15 import ToolCall15Scorer
 
@@ -575,12 +599,71 @@ def _build_trackers(config) -> list:
     return trackers
 
 
+def _run_terminalbench_native(config, console: Console) -> object:
+    """Run TerminalBench V2 natively via terminal-bench Harness."""
+    from openjarvis.evals.backends.terminalbench_native import (
+        TerminalBenchNativeBackend,
+    )
+    from openjarvis.evals.core.types import RunSummary
+
+    model = config.model
+    # LiteLLM expects "openai/<model>" for OpenAI-compatible servers
+    litellm_model = f"openai/{model}"
+    output_dir = getattr(config, "output_path", None) or "results/terminalbench-native/"
+
+    backend = TerminalBenchNativeBackend(
+        model=litellm_model,
+        api_base="http://localhost:8000/v1",
+        temperature=config.temperature,
+        max_samples=config.max_samples,
+        output_dir=output_dir,
+        n_concurrent=config.max_workers or 4,
+    )
+
+    import re
+
+    # Docker compose project names must be lowercase alphanumeric + hyphens/underscores
+    model_slug = re.sub(r"[^a-z0-9_-]", "-", model.lower().replace("/", "-"))
+    run_id = f"tb2-{model_slug}"
+    console.print(f"  Running TerminalBench V2 natively: {model}")
+    console.print(f"  Harness run_id: {run_id}")
+
+    results = backend.run_harness(run_id)
+
+    # Convert BenchmarkResults to RunSummary
+    total = len(results.trial_results) if hasattr(results, "trial_results") else 0
+    correct = 0
+    if hasattr(results, "trial_results"):
+        for tr in results.trial_results:
+            if getattr(tr, "is_resolved", False):
+                correct += 1
+
+    accuracy = correct / total if total > 0 else 0.0
+    return RunSummary(
+        benchmark="terminalbench-native",
+        category="agentic",
+        backend="terminalbench-native",
+        model=model,
+        total_samples=total,
+        scored_samples=total,
+        correct=correct,
+        accuracy=accuracy,
+        errors=0,
+        mean_latency_seconds=0.0,
+        total_cost_usd=0.0,
+    )
+
+
 def _run_single(config, console: Optional[Console] = None) -> object:
     """Run a single eval from a RunConfig and return the summary."""
     from openjarvis.evals.core.runner import EvalRunner
 
     if console is None:
         console = Console()
+
+    # TerminalBench V2 native: use terminal-bench Harness directly
+    if config.benchmark == "terminalbench-native":
+        return _run_terminalbench_native(config, console)
 
     eval_backend = _build_backend(
         config.backend,
@@ -590,6 +673,7 @@ def _run_single(config, console: Optional[Console] = None) -> object:
         telemetry=getattr(config, "telemetry", False),
         gpu_metrics=getattr(config, "gpu_metrics", False),
         model=config.model,
+        max_turns=getattr(config, "max_turns", None),
     )
     dataset = _build_dataset(config.benchmark)
     # Inject engine config for benchmarks that run their own simulation

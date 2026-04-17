@@ -35,6 +35,10 @@ class MemorySearchRequest(BaseModel):
     top_k: int = 5
 
 
+class MemoryIndexRequest(BaseModel):
+    path: str
+
+
 class BudgetLimitsRequest(BaseModel):
     max_tokens_per_day: Optional[int] = None
     max_requests_per_hour: Optional[int] = None
@@ -148,13 +152,26 @@ async def message_agent(agent_id: str, req: AgentMessageRequest, request: Reques
 memory_router = APIRouter(prefix="/v1/memory", tags=["memory"])
 
 
+def _get_memory_backend(request: Request):
+    """Return the app-level memory backend, falling back to a fresh SQLiteMemory."""
+    backend = getattr(request.app.state, "memory_backend", None)
+    if backend is None:
+        try:
+            from openjarvis.tools.storage.sqlite import SQLiteMemory
+
+            backend = SQLiteMemory()
+        except Exception:
+            return None
+    return backend
+
+
 @memory_router.post("/store")
 async def memory_store(req: MemoryStoreRequest, request: Request):
     """Store content in memory."""
+    backend = _get_memory_backend(request)
+    if backend is None:
+        return {"status": "stored", "note": "no backend available"}
     try:
-        from openjarvis.tools.storage.sqlite import SQLiteMemory
-
-        backend = SQLiteMemory()
         backend.store(req.content, metadata=req.metadata or {})
         return {"status": "stored"}
     except Exception as exc:
@@ -164,13 +181,17 @@ async def memory_store(req: MemoryStoreRequest, request: Request):
 @memory_router.post("/search")
 async def memory_search(req: MemorySearchRequest, request: Request):
     """Search memory for relevant content."""
+    backend = _get_memory_backend(request)
+    if backend is None:
+        return {"results": []}
     try:
-        from openjarvis.tools.storage.sqlite import SQLiteMemory
-
-        backend = SQLiteMemory()
-        results = backend.search(req.query, top_k=req.top_k)
+        results = backend.retrieve(req.query, top_k=req.top_k)
         items = [
-            {"content": r.content, "score": r.score, "metadata": r.metadata}
+            {
+                "content": r.content,
+                "score": getattr(r, "score", 0.0),
+                "metadata": getattr(r, "metadata", {}),
+            }
             for r in results
         ]
         return {"results": items}
@@ -181,12 +202,71 @@ async def memory_search(req: MemorySearchRequest, request: Request):
 @memory_router.get("/stats")
 async def memory_stats(request: Request):
     """Get memory backend statistics."""
+    backend = _get_memory_backend(request)
+    if backend is None:
+        return {"entries": 0, "backend": "none", "status": "not_configured"}
     try:
-        from openjarvis.tools.storage.sqlite import SQLiteMemory
+        return {
+            "entries": backend.count(),
+            "backend": getattr(backend, "backend_id", "unknown"),
+        }
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
 
-        backend = SQLiteMemory()
-        stats = backend.stats()
-        return stats
+
+@memory_router.get("/config")
+async def memory_config(request: Request):
+    """Return current memory configuration."""
+    try:
+        config = getattr(request.app.state, "config", None)
+        if config is None:
+            from openjarvis.core.config import load_config
+
+            config = load_config()
+        backend = getattr(request.app.state, "memory_backend", None)
+        return {
+            "backend_type": (
+                backend.backend_id
+                if backend is not None
+                else config.memory.default_backend
+            ),
+            "context_top_k": config.memory.context_top_k,
+            "context_min_score": config.memory.context_min_score,
+            "context_max_tokens": config.memory.context_max_tokens,
+            "context_from_memory": config.agent.context_from_memory,
+        }
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@memory_router.post("/index")
+async def memory_index(req: MemoryIndexRequest, request: Request):
+    """Index files from a path into memory."""
+    try:
+        from pathlib import Path
+
+        from openjarvis.tools.storage.ingest import ingest_path
+
+        target = Path(req.path).expanduser().resolve()
+        if not target.exists():
+            raise HTTPException(status_code=404, detail=f"Path not found: {req.path}")
+
+        backend = _get_memory_backend(request)
+        if backend is None:
+            raise HTTPException(status_code=503, detail="No memory backend available")
+
+        chunks = ingest_path(target)
+        stored = 0
+        for chunk in chunks:
+            metadata = {"source": getattr(chunk, "source", str(target))}
+            if hasattr(chunk, "metadata") and chunk.metadata:
+                metadata.update(chunk.metadata)
+            backend.store(chunk.content, metadata=metadata)
+            stored += 1
+
+        return {"status": "indexed", "chunks_indexed": stored}
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 
@@ -196,17 +276,37 @@ async def memory_stats(request: Request):
 traces_router = APIRouter(prefix="/v1/traces", tags=["traces"])
 
 
+def _serialise_trace(trace) -> dict:
+    """Convert a Trace dataclass to a frontend-friendly dict."""
+    import datetime
+    from dataclasses import asdict
+
+    d = asdict(trace)
+    d["id"] = d.pop("trace_id", "")
+    started = d.pop("started_at", 0.0)
+    d["created_at"] = (
+        datetime.datetime.fromtimestamp(started, tz=datetime.timezone.utc).isoformat()
+        if started
+        else None
+    )
+    dur = d.pop("total_latency_seconds", 0.0)
+    d["duration_ms"] = round(dur * 1000)
+    for step in d.get("steps", []):
+        st = step.get("step_type")
+        if hasattr(st, "value"):
+            step["step_type"] = st.value
+    return d
+
+
 @traces_router.get("")
 async def list_traces(request: Request, limit: int = 20):
     """List recent traces."""
     try:
-        from dataclasses import asdict
-
         store = getattr(request.app.state, "trace_store", None)
         if store is None:
             return {"traces": []}
         traces = store.list_traces(limit=limit)
-        items = [asdict(t) for t in traces]
+        items = [_serialise_trace(t) for t in traces]
         return {"traces": items}
     except Exception as exc:
         return {"traces": [], "error": str(exc)}
@@ -216,15 +316,13 @@ async def list_traces(request: Request, limit: int = 20):
 async def get_trace(trace_id: str, request: Request):
     """Get a specific trace by ID."""
     try:
-        from dataclasses import asdict
-
         store = getattr(request.app.state, "trace_store", None)
         if store is None:
             raise HTTPException(status_code=404, detail="Trace not found")
         trace = store.get(trace_id)
         if trace is None:
             raise HTTPException(status_code=404, detail="Trace not found")
-        return asdict(trace)
+        return _serialise_trace(trace)
     except HTTPException:
         raise
     except Exception as exc:

@@ -8,7 +8,8 @@ import {
   Loader2,
 } from 'lucide-react';
 import { SOURCE_CATALOG } from '../../types/connectors';
-import { connectSource } from '../../lib/connectors-api';
+import { connectSource, getConnector } from '../../lib/connectors-api';
+import { getBase } from '../../lib/api';
 import type { ConnectRequest, ConnectorMeta } from '../../types/connectors';
 
 // ---------------------------------------------------------------------------
@@ -55,7 +56,7 @@ function SidebarItem({
         ) : state === 'skipped' ? (
           <SkipForward size={16} style={{ color: 'var(--color-text-tertiary)' }} />
         ) : state === 'error' ? (
-          <Circle size={16} style={{ color: '#ef4444' }} />
+          <Circle size={16} style={{ color: 'var(--color-error)' }} />
         ) : (
           <Circle size={16} style={{ color: 'var(--color-text-tertiary)' }} />
         )}
@@ -138,89 +139,71 @@ function FilesystemPanel({
 function OAuthPanel({
   displayName,
   authUrl,
+  connectorId,
   onConnect,
   onSkip,
   isConnecting,
 }: {
   displayName: string;
   authUrl?: string;
+  connectorId: string;
   onConnect: (req: ConnectRequest) => void;
   onSkip: () => void;
   isConnecting: boolean;
 }) {
-  const [token, setToken] = useState('');
-  const [phase, setPhase] = useState<'start' | 'paste'>('start');
+  const [waiting, setWaiting] = useState(false);
 
-  const openBrowser = () => {
-    if (authUrl) {
-      window.open(authUrl, '_blank');
-    }
-    setPhase('paste');
+  const startOAuth = () => {
+    // Open the server's OAuth start endpoint which redirects to the provider
+    const oauthUrl = `${getBase()}/v1/connectors/${encodeURIComponent(connectorId)}/oauth/start`;
+    window.open(oauthUrl, '_blank', 'width=600,height=700');
+    setWaiting(true);
+
+    // Poll for connection status
+    const interval = setInterval(async () => {
+      try {
+        const info = await getConnector(connectorId);
+        if (info.connected) {
+          clearInterval(interval);
+          setWaiting(false);
+          onConnect({});
+        }
+      } catch {
+        // ignore polling errors
+      }
+    }, 2000);
+
+    // Stop polling after 3 minutes
+    setTimeout(() => {
+      clearInterval(interval);
+      setWaiting(false);
+    }, 180000);
   };
 
   return (
     <div className="flex flex-col gap-4">
-      {phase === 'start' ? (
-        <>
-          <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
-            Authorize OpenJarvis to access your {displayName} account.
-          </p>
-          <button
-            onClick={openBrowser}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium self-start transition-all"
-            style={{
-              background: 'var(--color-accent)',
-              color: 'white',
-            }}
-          >
-            <ExternalLink size={14} />
-            Open in browser
-          </button>
-        </>
+      <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+        {waiting
+          ? `Waiting for ${displayName} authorization... Complete it in the browser window.`
+          : `Connect your ${displayName} account with one click.`}
+      </p>
+      {waiting ? (
+        <div className="flex items-center gap-2 text-sm" style={{ color: 'var(--color-accent)' }}>
+          <Loader2 size={16} className="animate-spin" />
+          Waiting for authorization...
+        </div>
       ) : (
-        <>
-          <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
-            After authorizing, paste the token or code below.
-          </p>
-          <textarea
-            value={token}
-            onChange={(e) => setToken(e.target.value)}
-            rows={3}
-            placeholder="Paste auth token or code here..."
-            className="w-full px-3 py-2 rounded-lg text-sm outline-none resize-none font-mono"
-            style={{
-              background: 'var(--color-surface)',
-              border: '1px solid var(--color-border)',
-              color: 'var(--color-text)',
-            }}
-          />
-          <div className="flex gap-2">
-            <button
-              onClick={() => onConnect({ token, code: token })}
-              disabled={!token.trim() || isConnecting}
-              className="px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-all"
-              style={{
-                background: token.trim() ? 'var(--color-accent)' : 'var(--color-bg-tertiary)',
-                color: token.trim() ? 'white' : 'var(--color-text-tertiary)',
-                cursor: token.trim() && !isConnecting ? 'pointer' : 'not-allowed',
-              }}
-            >
-              {isConnecting && <Loader2 size={14} className="animate-spin" />}
-              Confirm
-            </button>
-            <button
-              onClick={() => setPhase('start')}
-              className="px-4 py-2 rounded-lg text-sm font-medium transition-all"
-              style={{
-                background: 'var(--color-surface)',
-                border: '1px solid var(--color-border)',
-                color: 'var(--color-text-secondary)',
-              }}
-            >
-              Back
-            </button>
-          </div>
-        </>
+        <button
+          onClick={startOAuth}
+          className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium self-start transition-all"
+          style={{
+            background: 'var(--color-accent)',
+            color: 'var(--color-on-accent)',
+          }}
+        >
+          <ExternalLink size={14} />
+          Connect {displayName}
+        </button>
       )}
       <button
         onClick={onSkip}
@@ -266,7 +249,7 @@ function LocalPanel({
         className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium self-start transition-all"
         style={{
           background: 'var(--color-accent)',
-          color: 'white',
+          color: 'var(--color-on-accent)',
           cursor: isConnecting ? 'not-allowed' : 'pointer',
           opacity: isConnecting ? 0.7 : 1,
         }}
@@ -359,7 +342,7 @@ function StepByStepPanel({
           }}
         >
           <div style={{
-            color: '#7c3aed', fontSize: 11,
+            color: 'var(--color-accent-purple)', fontSize: 11,
             fontWeight: 600, marginBottom: 4,
           }}>
             STEP {i + 1}
@@ -376,7 +359,7 @@ function StepByStepPanel({
               target="_blank"
               rel="noopener noreferrer"
               style={{
-                color: '#60a5fa', fontSize: 12,
+                color: 'var(--color-accent)', fontSize: 12,
                 textDecoration: 'underline',
               }}
             >
@@ -431,8 +414,8 @@ function StepByStepPanel({
           style={{
             flex: 1, padding: 10,
             background: isConnecting || (fields.length > 0 && !allFilled)
-              ? '#444' : '#7c3aed',
-            color: 'white', border: 'none',
+              ? 'var(--color-disabled-bg)' : 'var(--color-accent-purple)',
+            color: 'var(--color-on-accent)', border: 'none',
             borderRadius: 6, fontSize: 13,
             cursor: 'pointer',
           }}
@@ -548,9 +531,9 @@ export function SourceConnectFlow({
                 <div
                   className="mt-3 px-4 py-3 rounded-lg text-sm"
                   style={{
-                    background: 'rgba(239,68,68,0.1)',
-                    border: '1px solid rgba(239,68,68,0.2)',
-                    color: '#ef4444',
+                    background: 'color-mix(in srgb, var(--color-error) 10%, transparent)',
+                    border: '1px solid color-mix(in srgb, var(--color-error) 20%, transparent)',
+                    color: 'var(--color-error)',
                   }}
                 >
                   {activeEntry.error}
@@ -589,6 +572,7 @@ export function SourceConnectFlow({
               <OAuthPanel
                 displayName={activeCard.display_name}
                 authUrl={undefined}
+                connectorId={activeEntry.id}
                 onConnect={(req) => handleConnect(activeEntry.id, req)}
                 onSkip={() => handleSkip(activeEntry.id)}
                 isConnecting={activeEntry.state === 'connecting'}
@@ -609,7 +593,7 @@ export function SourceConnectFlow({
             <button
               onClick={onComplete}
               className="w-full py-3 px-4 rounded-xl font-semibold text-sm transition-all"
-              style={{ background: 'var(--color-accent)', color: 'white' }}
+              style={{ background: 'var(--color-accent)', color: 'var(--color-on-accent)' }}
             >
               Continue →
             </button>

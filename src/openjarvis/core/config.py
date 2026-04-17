@@ -14,7 +14,7 @@ import shutil
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 try:
     import tomllib  # Python 3.11+
@@ -228,40 +228,69 @@ def recommend_engine(hw: HardwareInfo) -> str:
     return "llamacpp"
 
 
-def recommend_model(hw: HardwareInfo, engine: str) -> str:
-    """Suggest the largest Qwen3.5 model that fits the detected hardware.
+def _available_memory_gb(hw: HardwareInfo) -> float:
+    """Return usable memory in GB for model loading."""
+    gpu = hw.gpu
+    if gpu and gpu.vram_gb > 0:
+        return gpu.vram_gb * max(gpu.count, 1) * 0.9
+    if hw.ram_gb > 0:
+        return (hw.ram_gb - 4) * 0.8
+    return 0.0
 
-    Uses llmfit-style VRAM estimation: Q4_K_M quantization is ~0.5 bytes/param
-    with 10% overhead.  For MoE models Ollama loads full model weights, so we
-    use ``parameter_count_b`` (total), not ``active_parameter_count_b``.
+
+# Explicit tier table: (max_ram_gb, model_id).
+# Walked in order — first tier where available_gb <= max_ram is chosen.
+# Uses Qwen3.5 MoE models — better quality per GB than dense models since
+# only a fraction of parameters are active per token.
+_MODEL_TIERS = [
+    (8, "qwen3.5:2b"),
+    (16, "qwen3.5:4b"),
+    (32, "qwen3.5:9b"),
+    (64, "qwen3.5:27b"),
+]
+_MODEL_TIER_FALLBACK = "qwen3.5:27b"
+
+
+def recommend_model(hw: HardwareInfo, engine: str) -> str:
+    """Suggest the best Qwen3.5 model that fits the detected hardware.
+
+    Uses an explicit tier table mapping available memory to model size.
+    Falls back to scanning the full catalog if the tiered model is not
+    compatible with the selected engine.
     """
     from openjarvis.intelligence.model_catalog import BUILTIN_MODELS
 
-    # Determine available memory in GB
-    gpu = hw.gpu
-    if gpu and gpu.vram_gb > 0:
-        available_gb = gpu.vram_gb * max(gpu.count, 1) * 0.9
-    elif hw.ram_gb > 0:
-        available_gb = (hw.ram_gb - 4) * 0.8
-    else:
+    available_gb = _available_memory_gb(hw)
+    if available_gb <= 0:
         return ""
 
-    # Filter Qwen3.5 models compatible with the chosen engine
+    # Build a lookup for quick engine-compatibility checks
+    catalog = {spec.model_id: spec for spec in BUILTIN_MODELS}
+
+    # Try explicit tier mapping first
+    model_id = _MODEL_TIER_FALLBACK
+    for max_ram, tier_model in _MODEL_TIERS:
+        if available_gb <= max_ram:
+            model_id = tier_model
+            break
+
+    spec = catalog.get(model_id)
+    if spec and engine in spec.supported_engines:
+        return model_id
+
+    # Fallback: scan all Qwen3.5 models for engine compatibility
     candidates = [
-        spec
-        for spec in BUILTIN_MODELS
-        if spec.provider == "alibaba"
-        and spec.model_id.startswith("qwen3.5:")
-        and engine in spec.supported_engines
+        s
+        for s in BUILTIN_MODELS
+        if s.provider == "alibaba"
+        and s.model_id.startswith("qwen3.5:")
+        and engine in s.supported_engines
     ]
-
-    # Sort by parameter count descending — pick the largest that fits
     candidates.sort(key=lambda s: s.parameter_count_b, reverse=True)
-
-    for spec in candidates:
-        estimated_gb = spec.parameter_count_b * 0.5 * 1.1
+    for s in candidates:
+        estimated_gb = s.parameter_count_b * 0.5 * 1.1
         if estimated_gb <= available_gb:
-            return spec.model_id
+            return s.model_id
 
     return ""
 
@@ -625,6 +654,17 @@ class AgentLearningConfig:
 
 
 @dataclass(slots=True)
+class SkillsLearningConfig:
+    """Configuration for the skills learning loop (Plan 2A)."""
+
+    auto_optimize: bool = False  # opt in via config
+    optimizer: str = "dspy"  # "dspy" or "gepa"
+    min_traces_per_skill: int = 20
+    optimization_interval_seconds: int = 86400
+    overlay_dir: str = "~/.openjarvis/learning/skills/"
+
+
+@dataclass(slots=True)
 class MetricsConfig:
     """Reward / optimization metric weights."""
 
@@ -646,6 +686,7 @@ class LearningConfig:
         default_factory=IntelligenceLearningConfig,
     )
     agent: AgentLearningConfig = field(default_factory=AgentLearningConfig)
+    skills: SkillsLearningConfig = field(default_factory=SkillsLearningConfig)
     metrics: MetricsConfig = field(default_factory=MetricsConfig)
 
     # Training pipeline
@@ -772,6 +813,11 @@ class AgentConfig:
     system_prompt: str = ""  # inline system prompt (takes precedence if set)
     system_prompt_path: str = ""  # path to system prompt file (.txt, .md)
     context_from_memory: bool = True  # inject relevant memory context into prompts
+    default_system_prompt: str = (
+        "You are a helpful AI assistant running locally on the user's own "
+        "hardware through OpenJarvis. You are not a cloud service. Respond "
+        "helpfully, concisely, and accurately."
+    )
 
     # Backward-compat property for old field name
     @property
@@ -1227,12 +1273,73 @@ class CompressionConfig:
 
 
 @dataclass(slots=True)
+class SkillSourceConfig:
+    """Configuration for a single skill source (Hermes, OpenClaw, GitHub)."""
+
+    source: str = ""  # "hermes", "openclaw", or "github"
+    url: str = ""  # required when source = "github"
+    filter: Dict[str, Any] = field(default_factory=dict)
+    auto_update: bool = False
+
+
+@dataclass(slots=True)
 class SkillsConfig:
     """Configuration for agent-authored procedural skills."""
 
+    enabled: bool = True
     skills_dir: str = "~/.openjarvis/skills/"
-    nudge_interval: int = 15
+    active: str = "*"
     auto_discover: bool = True
+    auto_sync: bool = False
+    nudge_interval: int = 15
+    index_repo: str = "https://github.com/openjarvis/skill-index.git"
+    index_dir: str = "~/.openjarvis/skill-index/"
+    max_depth: int = 5
+    sandbox_dangerous: bool = True
+    sources: List[SkillSourceConfig] = field(default_factory=list)
+
+
+@dataclass
+class DigestSectionConfig:
+    """Configuration for a single digest section."""
+
+    sources: List[str] = field(default_factory=list)
+    max_items: int = 10
+    priority_contacts: List[str] = field(default_factory=list)
+
+
+@dataclass
+class DigestConfig:
+    """Configuration for the morning digest feature."""
+
+    enabled: bool = False
+    schedule: str = "0 6 * * *"
+    timezone: str = "America/Los_Angeles"
+    persona: str = "jarvis"
+    sections: List[str] = field(
+        default_factory=lambda: ["messages", "calendar", "health", "world"]
+    )
+    optional_sections: List[str] = field(
+        default_factory=lambda: ["github", "financial", "music", "fitness"]
+    )
+    honorific: str = "sir"
+    voice_id: str = ""
+    voice_speed: float = 1.0
+    tts_backend: str = "cartesia"
+    messages: DigestSectionConfig = field(
+        default_factory=lambda: DigestSectionConfig(
+            sources=["gmail", "slack", "google_tasks"]
+        )
+    )
+    calendar: DigestSectionConfig = field(
+        default_factory=lambda: DigestSectionConfig(sources=["gcalendar"])
+    )
+    health: DigestSectionConfig = field(
+        default_factory=lambda: DigestSectionConfig(sources=["oura", "apple_health"])
+    )
+    world: DigestSectionConfig = field(
+        default_factory=lambda: DigestSectionConfig(sources=[])
+    )
 
 
 @dataclass
@@ -1263,6 +1370,7 @@ class JarvisConfig:
     system_prompt: SystemPromptConfig = field(default_factory=SystemPromptConfig)
     compression: CompressionConfig = field(default_factory=CompressionConfig)
     skills: SkillsConfig = field(default_factory=SkillsConfig)
+    digest: DigestConfig = field(default_factory=DigestConfig)
 
     @property
     def memory(self) -> StorageConfig:
@@ -1472,6 +1580,7 @@ def load_config(path: Optional[Path] = None) -> JarvisConfig:
             "speech",
             "optimize",
             "agent_manager",
+            "digest",
         )
         for section_name in top_sections:
             if section_name in data:
