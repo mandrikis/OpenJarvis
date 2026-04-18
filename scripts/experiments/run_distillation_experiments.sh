@@ -132,33 +132,55 @@ run_session() {
         # (jarvis learning run doesn't support all config params yet,
         #  so we call the orchestrator directly)
         uv run python << PYEOF > "${session_output}/run.log" 2>&1 || true
-import json, shutil, sys
+import json, os, shutil, sys
 from pathlib import Path
-from unittest.mock import MagicMock
 
 from openjarvis.engine.cloud import CloudEngine
+from openjarvis.evals.backends.jarvis_direct import JarvisDirectBackend
 from openjarvis.traces.store import TraceStore
 from openjarvis.learning.distillation.checkpoint.store import CheckpointStore
 from openjarvis.learning.distillation.models import AutonomyMode
 from openjarvis.learning.distillation.orchestrator import DistillationOrchestrator
 from openjarvis.learning.distillation.storage.session_store import SessionStore
+from openjarvis.learning.distillation.student_runner import (
+    VLLMStudentRunner,
+    build_benchmark_samples_from_traces,
+)
 from openjarvis.learning.distillation.triggers import OnDemandTrigger
+from openjarvis.learning.optimize.feedback.judge import TraceJudge
 
-home = Path.home() / ".openjarvis"
+home = Path(os.environ.get("OPENJARVIS_HOME", str(Path.home() / ".openjarvis")))
 
 # Read config params
 teacher_model = "${teacher_model}"
+student_model = "${student_model}"
 autonomy = "auto"
 max_cost = float("$(grep 'max_cost_per_session_usd' "$config_file" | head -1 | sed 's/.*= *//')")
 max_tools = int("$(grep 'max_tool_calls_per_diagnosis' "$config_file" | head -1 | sed 's/.*= *//')")
 
+# Real student runner via vLLM
+vllm_host = os.environ.get("VLLM_HOST", "http://localhost:8001")
+student_runner = VLLMStudentRunner(
+    host=vllm_host,
+    model=student_model,
+)
+
+# Real judge via cloud LLM
+cloud_engine = CloudEngine()
+judge_backend = JarvisDirectBackend(engine_key="cloud")
+judge = TraceJudge(backend=judge_backend, model="gpt-5-mini-2025-08-07")
+
+# Build benchmark samples from existing traces
+trace_store = TraceStore(home / "traces.db")
+benchmark_samples = build_benchmark_samples_from_traces(trace_store, limit=50)
+
 orch = DistillationOrchestrator(
-    teacher_engine=CloudEngine(),
+    teacher_engine=cloud_engine,
     teacher_model=teacher_model,
-    trace_store=TraceStore(home / "traces.db"),
-    benchmark_samples=[],
-    student_runner=MagicMock(),
-    judge=MagicMock(score_trace=MagicMock(return_value=(0.5, "mock"))),
+    trace_store=trace_store,
+    benchmark_samples=benchmark_samples,
+    student_runner=student_runner,
+    judge=judge,
     session_store=SessionStore(home / "learning" / "learning.db"),
     checkpoint_store=CheckpointStore(home),
     openjarvis_home=home,
