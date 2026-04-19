@@ -122,17 +122,39 @@ class _OpenAICompatibleEngine(InferenceEngine):
             "model": data.get("model", model),
             "finish_reason": choice.get("finish_reason", "stop"),
         }
-        # Extract tool calls if present
+        # Extract tool calls if present. Validate that `arguments` is
+        # parseable JSON — small / quantized models sometimes emit
+        # unterminated or otherwise malformed JSON (especially when the
+        # response is truncated at max_tokens). If we pass that string
+        # back to vLLM in the next turn's message history, vLLM's chat
+        # template preprocessing will json.loads() it and return 400,
+        # deadlocking the agent loop. Coerce bad JSON to "{}" and log.
         raw_tool_calls = choice["message"].get("tool_calls", [])
         if raw_tool_calls:
-            result["tool_calls"] = [
-                {
-                    "id": tc.get("id", ""),
-                    "name": tc.get("function", {}).get("name", ""),
-                    "arguments": tc.get("function", {}).get("arguments", "{}"),
-                }
-                for tc in raw_tool_calls
-            ]
+            sanitized: List[Dict[str, Any]] = []
+            for tc in raw_tool_calls:
+                args_str = tc.get("function", {}).get("arguments", "{}")
+                if not isinstance(args_str, str):
+                    args_str = json.dumps(args_str)
+                try:
+                    json.loads(args_str)
+                except (json.JSONDecodeError, TypeError):
+                    logger.warning(
+                        "Model emitted malformed tool_call arguments "
+                        "(model=%s, tool=%s); coercing to '{}'. Raw: %r",
+                        model,
+                        tc.get("function", {}).get("name", ""),
+                        args_str[:200],
+                    )
+                    args_str = "{}"
+                sanitized.append(
+                    {
+                        "id": tc.get("id", ""),
+                        "name": tc.get("function", {}).get("name", ""),
+                        "arguments": args_str,
+                    }
+                )
+            result["tool_calls"] = sanitized
         return result
 
     async def stream(

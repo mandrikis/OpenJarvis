@@ -94,19 +94,30 @@ def _oj_result_to_tau2_msg(result: dict):
     raw_tool_calls = result.get("tool_calls", [])
     tool_calls = None
     if raw_tool_calls:
-        tool_calls = [
-            ToolCall(
-                id=tc.get("id", ""),
-                name=tc.get("name", ""),
-                arguments=(
-                    json.loads(tc["arguments"])
-                    if isinstance(tc.get("arguments"), str)
-                    else tc.get("arguments", {})
-                ),
-                requestor="assistant",
+        tool_calls = []
+        for tc in raw_tool_calls:
+            raw_args = tc.get("arguments", {})
+            if isinstance(raw_args, str):
+                try:
+                    parsed_args = json.loads(raw_args)
+                except json.JSONDecodeError:
+                    LOGGER.warning(
+                        "Malformed tool_call arguments for %s; "
+                        "defaulting to {}. Raw: %r",
+                        tc.get("name", ""),
+                        raw_args[:200],
+                    )
+                    parsed_args = {}
+            else:
+                parsed_args = raw_args or {}
+            tool_calls.append(
+                ToolCall(
+                    id=tc.get("id", ""),
+                    name=tc.get("name", ""),
+                    arguments=parsed_args,
+                    requestor="assistant",
+                )
             )
-            for tc in raw_tool_calls
-        ]
 
     content = result.get("content") or ""
     content = _strip_think_tags(content) if content else None
