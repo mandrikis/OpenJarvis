@@ -23,7 +23,8 @@ _BLOCKED_PATTERNS = [
     "eval(",
     "exec(",
     "compile(",
-    "open(",
+    # "open(" removed — agents need file I/O for data tasks;
+    # the sandbox workspace already provides isolation.
 ]
 
 

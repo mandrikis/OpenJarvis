@@ -367,8 +367,8 @@ class NativeOpenHandsAgent(ToolUsingAgent):
                     tool_result = self._executor.execute(tc)
                     all_tool_results.append(tool_result)
                     obs_text = tool_result.content
-                    if len(obs_text) > 4000:
-                        obs_text = obs_text[:4000] + "\n\n[Output truncated]"
+                    if len(obs_text) > 16000:
+                        obs_text = obs_text[:16000] + "\n\n[Output truncated]"
                     messages.append(
                         Message(
                             role=Role.TOOL,
