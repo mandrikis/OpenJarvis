@@ -337,12 +337,6 @@ def _build_dataset(benchmark: str, subset: str | None = None):
         from openjarvis.evals.datasets.liveresearch import LiveResearchBenchDataset
 
         return LiveResearchBenchDataset(path=subset)
-    elif benchmark == "liveresearchbench":
-        from openjarvis.evals.datasets.liveresearchbench import (
-            LiveResearchBenchDataset as LRBDataset,
-        )
-
-        return LRBDataset()
     elif benchmark == "toolcall15":
         from openjarvis.evals.datasets.toolcall15 import ToolCall15Dataset
 
@@ -495,12 +489,6 @@ def _build_scorer(benchmark: str, judge_backend, judge_model: str):
         from openjarvis.evals.scorers.liveresearch import LiveResearchBenchScorer
 
         return LiveResearchBenchScorer(judge_backend, judge_model)
-    elif benchmark == "liveresearchbench":
-        from openjarvis.evals.scorers.liveresearchbench import (
-            LiveResearchBenchScorer as LRBScorer,
-        )
-
-        return LRBScorer(judge_backend, judge_model)
     elif benchmark == "toolcall15":
         from openjarvis.evals.scorers.toolcall15 import ToolCall15Scorer
 

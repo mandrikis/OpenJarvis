@@ -64,7 +64,6 @@ KNOWN_BENCHMARKS = {
     "taubench",
     "livecodebench",
     "liveresearch",
-    "liveresearchbench",
     "toolcall15",
 }
 
