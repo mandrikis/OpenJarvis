@@ -85,7 +85,7 @@ Key comparisons:
 - RTX 6000 Pro vs Mac Mini M4 → consumer/workstation efficiency frontier
 - GGUF models (Kimi, MiniMax) run on all platforms via llama.cpp/MLX
 
-## Models (9 priority + 3 cloud baselines)
+## Models (12 priority + 3 cloud baselines)
 
 ### Cloud Baselines
 | ID | Model | Engine |
@@ -106,6 +106,9 @@ Key comparisons:
 | kimi-k25 | Kimi-K2.5 (GGUF) | ~32B | llama.cpp | 2x GPU |
 | minimax-m25 | MiniMax-M2.5 (GGUF) | ~45B | llama.cpp | 2-4x GPU |
 | lfm-1.2b | LFM2.5-1.2B-Instruct | 1.2B | llama.cpp | CPU |
+| nemotron-nano-4b-fp8 | Nemotron-3-Nano-4B-FP8 | 4B | vLLM | 1x GPU |
+| gemma-4-e4b | Gemma 4 E4B IT | 4B | vLLM/Ollama | 1x GPU |
+| qwen-4b | Qwen3.5-4B | 4B | vLLM/Ollama | 1x GPU |
 
 ## Benchmarks (7)
 
@@ -115,9 +118,9 @@ Key comparisons:
 | taubench | TauBench V2 | 60+40 | 20 A+R | Implemented |
 | gaia | GAIA | 50 | 20 | Implemented |
 | terminalbench | TerminalBench | varies | 20 | Implemented |
-| toolcall15 | ToolCall-15 | 15 | 15 (all) | TODO |
-| livecodebench | LiveCodeBench | ~100 | 20 | TODO |
-| liveresearch | LiveResearchBench | 100 | 10 | TODO |
+| toolcall15 | ToolCall-15 | 15 | 15 (all) | Implemented |
+| livecodebench | LiveCodeBench | ~100 | 20 | Implemented |
+| liveresearchbench | LiveResearchBench | 100 | 10 | Implemented |
 
 ## Metrics Captured Per Run
 - accuracy (benchmark-specific)
@@ -142,29 +145,152 @@ Key comparisons:
 - [ ] Wire telemetry capture to all eval runs
 
 ### Phase 1b: Run cloud baselines (no GPU needed)
-- [x] Claude Opus — PinchBench (95.65%), TauBench A+R (86.67%),
-      TauBench Telecom (75%), GAIA (66.67%)
-- [x] GPT-5.4 — PinchBench (52-65%), TauBench A+R (81.67%),
-      TauBench Telecom (75%), GAIA (34.29%)
-- [x] Gemini 3.1 Pro — PinchBench (78.26%), TauBench A+R (58.33%),
-      TauBench Telecom (77.5%), GAIA (47.06%)
-- [ ] All 3 cloud baselines — ToolCall-15, LiveCodeBench, LiveResearchBench
-- [ ] All 3 cloud baselines — TerminalBench
+- [x] Claude Opus 4.6
+  - [ ] PinchBench
+  - [ ] TauBench
+  - [ ] GAIA
+  - [ ] TerminalBench
+  - [ ] ToolCall-15
+  - [ ] LiveCodeBench
+  - [ ] LiveResearchBench
+- [x] GPT-5.4
+  - [ ] PinchBench
+  - [ ] TauBench
+  - [ ] GAIA
+  - [ ] TerminalBench
+  - [ ] ToolCall-15
+  - [ ] LiveCodeBench
+  - [ ] LiveResearchBench
+- [x] Gemini 3.1 Pro
+  - [ ] PinchBench
+  - [ ] TauBench
+  - [ ] GAIA
+  - [ ] TerminalBench
+  - [ ] ToolCall-15
+  - [ ] LiveCodeBench
+  - [ ] LiveResearchBench
 
 ### Phase 1c: Run local models (GPU required)
-- [x] Qwen-397B — PinchBench (78.26%), TauBench A+R (81.67%)
-- [x] Qwen-122B — PinchBench (73.91%), TauBench A+R (80%)
-- [x] Qwen-35B — PinchBench (73.91%), TauBench A+R (77.27%)
-- [x] Nemotron-Super — PinchBench (78.26%), TauBench A+R (86.67%),
-      TauBench Telecom (70%), GAIA (48.48%)
-- [ ] Qwen-27B — all 7 benchmarks
-- [ ] Qwen-9B — all 7 benchmarks
-- [ ] Qwen-2B — all 7 benchmarks
-- [ ] Trinity-Large — all 7 benchmarks
-- [ ] Nemotron-Nano — all 7 benchmarks
-- [ ] Kimi-K2.5 — all 7 benchmarks
-- [ ] MiniMax-M2.5 — all 7 benchmarks
-- [ ] LFM-1.2B — all 7 benchmarks
+- [ ] Qwen-397B
+  - [x] PinchBench
+  - [x] TauBench
+  - [x] GAIA
+  - [ ] TerminalBench
+  - [x] ToolCall-15
+  - [ ] LiveCodeBench
+  - [ ] LiveResearchBench
+- [ ] Qwen-27B
+  - [x] PinchBench
+  - [x] TauBench
+  - [x] GAIA
+  - [ ] TerminalBench
+  - [x] ToolCall-15
+  - [ ] LiveCodeBench
+  - [ ] LiveResearchBench
+- [ ] Qwen-9B 
+  - [x] PinchBench
+  - [x] TauBench
+  - [x] GAIA
+  - [ ] TerminalBench
+  - [x] ToolCall-15
+  - [ ] LiveCodeBench
+  - [ ] LiveResearchBench
+- [ ] Qwen-2B
+  - [x] PinchBench
+  - [x] TauBench
+  - [x] GAIA
+  - [ ] TerminalBench
+  - [x] ToolCall-15
+  - [x] LiveCodeBench
+  - [x] LiveResearchBench
+- [ ] Qwen-4B
+  - [ ] PinchBench
+  - [ ] TauBench
+  - [ ] GAIA
+  - [ ] TerminalBench
+  - [ ] ToolCall-15
+  - [ ] LiveCodeBench
+  - [ ] LiveResearchBench
+- [ ] Trinity-Large
+  - [ ] PinchBench
+  - [ ] TauBench
+  - [ ] GAIA
+  - [ ] TerminalBench
+  - [ ] ToolCall-15
+  - [ ] LiveCodeBench
+  - [ ] LiveResearchBench
+- [ ] Nemotron-Nano-30B
+  - [x] PinchBench
+  - [x] TauBench
+  - [x] GAIA
+  - [ ] TerminalBench
+  - [x] ToolCall-15
+  - [ ] LiveCodeBench
+  - [x] LiveResearchBench
+- [ ] Nemotron-Nano-4B-FP8
+  - [x] PinchBench
+  - [x] TauBench
+  - [x] GAIA
+  - [ ] TerminalBench
+  - [x] ToolCall-15
+  - [ ] LiveCodeBench
+  - [x] LiveResearchBench
+- [ ] Kimi-K2.5
+  - [ ] PinchBench
+  - [ ] TauBench
+  - [ ] GAIA
+  - [ ] TerminalBench
+  - [ ] ToolCall-15
+  - [ ] LiveCodeBench
+  - [ ] LiveResearchBench
+- [ ] MiniMax-M2.5
+  - [x] PinchBench
+  - [x] TauBench
+  - [ ] GAIA
+  - [ ] TerminalBench
+  - [x] ToolCall-15
+  - [ ] LiveCodeBench
+  - [x] LiveResearchBench
+- [ ] LFM-1.2B
+  - [ ] PinchBench
+  - [ ] TauBench
+  - [ ] GAIA
+  - [ ] TerminalBench
+  - [ ] ToolCall-15
+  - [ ] LiveCodeBench
+  - [ ] LiveResearchBench
+- [ ] Gemma-4-E4B
+  - [ ] PinchBench
+  - [ ] TauBench
+  - [ ] GAIA
+  - [ ] TerminalBench
+  - [ ] ToolCall-15
+  - [ ] LiveCodeBench
+  - [ ] LiveResearchBench
+- [ ] Qwen-122B - m
+  - [ ] PinchBench
+  - [ ] TauBench
+  - [ ] GAIA
+  - [ ] TerminalBench
+  - [ ] ToolCall-15
+  - [ ] LiveCodeBench
+  - [ ] LiveResearchBench
+- [ ] Qwen-35B - m
+  - [ ] PinchBench
+  - [ ] TauBench
+  - [ ] GAIA
+  - [ ] TerminalBench
+  - [ ] ToolCall-15
+  - [ ] LiveCodeBench
+  - [ ] LiveResearchBench
+- [ ] Nemotron-Super - m
+  - [ ] PinchBench
+  - [ ] TauBench
+  - [ ] GAIA
+  - [ ] TerminalBench
+  - [ ] ToolCall-15
+  - [ ] LiveCodeBench
+  - [ ] LiveResearchBench
 
 ### Phase 1d: Compile baseline results
 - [ ] Generate Pareto frontier plots (quality vs cost, vs energy, vs FLOPs)
@@ -221,16 +347,8 @@ Training targets:
 - tool_choice + SQLite fixes (PR #163)
 - Gemini thought_signature support
 - Nemotron SGLang serving
-- 8 models evaluated on PinchBench
-- 7 models evaluated on TauBench A+R
-- 4 models evaluated on TauBench Telecom
-- 4 models evaluated on GAIA
 
 ### In Progress
-- Qwen 35B: TauBench telecom + GAIA running
-- ToolCall-15 integration: TODO
-- LiveCodeBench integration: TODO
-- LiveResearchBench integration: TODO
 - Telemetry wiring: TODO
 
 ### Blocked
