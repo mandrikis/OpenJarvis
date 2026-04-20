@@ -20,10 +20,10 @@ import math
 import re
 import statistics
 import time
-from collections import defaultdict
+from collections import Counter, defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from openjarvis.evals.core.backend import InferenceBackend
 from openjarvis.evals.core.dataset import DatasetProvider
@@ -53,6 +53,27 @@ LOGGER = logging.getLogger(__name__)
 _THINK_TAG_RE = re.compile(r"<think>.*?</think>", re.DOTALL)
 
 
+class TooManyErrorsError(RuntimeError):
+    """Raised when an eval run is aborted due to excessive errors.
+
+    Attributes:
+        reason: Which threshold tripped, e.g. "max_consecutive_errors=3".
+        error_count: Total errors seen before abort.
+        top_errors: [(message, count), ...] of the most common error messages.
+    """
+
+    def __init__(
+        self,
+        reason: str,
+        error_count: int,
+        top_errors: List[Tuple[str, int]],
+    ) -> None:
+        super().__init__(f"Eval run aborted: {reason} ({error_count} errors)")
+        self.reason = reason
+        self.error_count = error_count
+        self.top_errors = top_errors
+
+
 def _strip_think_tags(text: str) -> str:
     """Remove <think>...</think> blocks from model output."""
     return _THINK_TAG_RE.sub("", text).strip()
@@ -76,6 +97,9 @@ class EvalRunner:
         self._trackers: List[ResultTracker] = trackers or []
         self._results: List[EvalResult] = []
         self._output_file: Optional[Any] = None
+        self._error_count: int = 0
+        self._consecutive_errors: int = 0
+        self._correct_count: int = 0
 
     @property
     def results(self) -> List[EvalResult]:
@@ -84,13 +108,15 @@ class EvalRunner:
 
     def run(
         self,
-        progress_callback: Optional[Callable[[int, int], None]] = None,
+        progress_callback: Optional[Callable[..., None]] = None,
     ) -> RunSummary:
         """Execute the evaluation and return a summary.
 
         Args:
-            progress_callback: Optional ``(completed, total)`` callback invoked
-                after each sample completes, useful for driving progress bars.
+            progress_callback: Optional
+                ``(completed, total, correct, errors)`` callback invoked
+                after each sample completes, useful for driving progress bars
+                with a live correctness tally.
         """
         cfg = self._config
         started_at = time.time()
@@ -197,29 +223,44 @@ class EvalRunner:
                     result = self._process_one(record)
                     self._results.append(result)
                     self._flush_result(result)
+                    self._update_counters(result)
                     LOGGER.info(
                         "Sample %d/%d done: %s",
                         len(self._results),
                         total,
                         result.record_id,
                     )
-                    if progress_callback is not None:
-                        progress_callback(len(self._results), total)
+                    self._emit_progress(progress_callback, total)
+                    self._check_error_threshold(parallel=False)
             else:
                 with ThreadPoolExecutor(max_workers=cfg.max_workers) as pool:
                     futures = {pool.submit(self._process_one, r): r for r in records}
-                    for future in as_completed(futures):
-                        result = future.result()
-                        self._results.append(result)
-                        self._flush_result(result)
-                        LOGGER.info(
-                            "Sample %d/%d done: %s",
-                            len(self._results),
-                            total,
-                            result.record_id,
-                        )
-                        if progress_callback is not None:
-                            progress_callback(len(self._results), total)
+                    try:
+                        for future in as_completed(futures):
+                            result = future.result()
+                            self._results.append(result)
+                            self._flush_result(result)
+                            self._update_counters(result)
+                            LOGGER.info(
+                                "Sample %d/%d done: %s",
+                                len(self._results),
+                                total,
+                                result.record_id,
+                            )
+                            self._emit_progress(progress_callback, total)
+                            # With a single worker, ThreadPoolExecutor
+                            # completes in submission order, so
+                            # "consecutive" is still well-defined.
+                            self._check_error_threshold(
+                                parallel=cfg.max_workers > 1,
+                            )
+                    except TooManyErrorsError:
+                        # Cancel pending (not-yet-started) futures so the
+                        # pool can shut down promptly. In-flight samples
+                        # will still complete before the `with` block exits.
+                        for f in futures:
+                            f.cancel()
+                        raise
         finally:
             if self._output_file:
                 self._output_file.close()
@@ -444,7 +485,7 @@ class EvalRunner:
     def _run_episode_mode(
         self,
         records: List[EvalRecord],
-        progress_callback: Optional[Callable[[int, int], None]],
+        progress_callback: Optional[Callable[..., None]],
         total: int,
     ) -> None:
         """Process samples sequentially within episodes.
@@ -487,6 +528,7 @@ class EvalRunner:
 
                 self._results.append(result)
                 self._flush_result(result)
+                self._update_counters(result)
                 LOGGER.info(
                     "Sample %d/%d done: %s",
                     len(self._results),
@@ -516,8 +558,8 @@ class EvalRunner:
                     if len(successful_examples) > self._MAX_PRIOR_EXAMPLES:
                         successful_examples.pop(0)
 
-                if progress_callback is not None:
-                    progress_callback(len(self._results), total)
+                self._emit_progress(progress_callback, total)
+                self._check_error_threshold(parallel=False)
 
     def _inject_examples(
         self,
@@ -825,6 +867,86 @@ class EvalRunner:
         model_slug = self._config.model.replace("/", "-").replace(":", "-")
         name = f"{self._config.benchmark}_{model_slug}.jsonl"
         return Path("results") / name
+
+    def _update_counters(self, result: EvalResult) -> None:
+        """Track correct/error/consecutive-error counts after each completion."""
+        if result.error:
+            self._error_count += 1
+            self._consecutive_errors += 1
+        else:
+            self._consecutive_errors = 0
+        if result.is_correct:
+            self._correct_count += 1
+
+    def _emit_progress(
+        self,
+        progress_callback: Optional[Callable[..., None]],
+        total: int,
+    ) -> None:
+        """Invoke the progress callback with the live tally."""
+        if progress_callback is None:
+            return
+        progress_callback(
+            len(self._results),
+            total,
+            self._correct_count,
+            self._error_count,
+        )
+
+    def _check_error_threshold(self, *, parallel: bool) -> None:
+        """Raise TooManyErrorsError if any configured threshold is exceeded.
+
+        Consecutive-error checking is skipped in parallel mode because
+        ``as_completed`` yields results out of submission order, making
+        "consecutive" ill-defined.
+        """
+        cfg = self._config
+        completed = len(self._results)
+
+        reason: Optional[str] = None
+        if cfg.max_errors is not None and self._error_count >= cfg.max_errors:
+            reason = f"max_errors={cfg.max_errors} reached"
+        elif (
+            not parallel
+            and cfg.max_consecutive_errors is not None
+            and cfg.max_consecutive_errors > 0
+            and self._consecutive_errors >= cfg.max_consecutive_errors
+        ):
+            reason = (
+                f"max_consecutive_errors={cfg.max_consecutive_errors} "
+                f"reached ({self._consecutive_errors} in a row)"
+            )
+        elif (
+            cfg.error_rate_threshold is not None
+            and completed >= cfg.error_rate_min_samples
+        ):
+            rate = self._error_count / completed
+            if rate >= cfg.error_rate_threshold:
+                reason = (
+                    f"error_rate {rate:.0%} >= threshold "
+                    f"{cfg.error_rate_threshold:.0%} "
+                    f"({self._error_count}/{completed} samples)"
+                )
+        if reason is None:
+            return
+
+        top_errors = Counter(
+            str(r.error) for r in self._results if r.error
+        ).most_common(5)
+        bar = "=" * 60
+        LOGGER.error(bar)
+        LOGGER.error("ABORTING RUN: %s", reason)
+        LOGGER.error(
+            "Errors: %d / %d samples completed",
+            self._error_count,
+            completed,
+        )
+        LOGGER.error("Top error messages:")
+        for msg, n in top_errors:
+            LOGGER.error("  [%d] %s", n, msg[:200])
+        LOGGER.error("Partial results (if any) were streamed to the output JSONL.")
+        LOGGER.error(bar)
+        raise TooManyErrorsError(reason, self._error_count, top_errors)
 
     def _compute_summary(
         self,

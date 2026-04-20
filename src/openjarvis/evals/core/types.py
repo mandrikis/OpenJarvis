@@ -89,6 +89,16 @@ class RunConfig:
     # running thinking/reasoning models that consume turns on intermediate
     # reasoning before producing tool calls.
     max_turns: Optional[int] = None
+    # Fail-fast thresholds. None = disabled. Used by EvalRunner to abort a run
+    # when errors accumulate faster than is worth tolerating (e.g. offline
+    # vLLM endpoint, corrupted benchmark DB). `max_errors` and
+    # `error_rate_threshold` apply to both sequential and parallel runs;
+    # `max_consecutive_errors` only applies to sequential runs because
+    # ThreadPoolExecutor completion order is non-deterministic.
+    max_errors: Optional[int] = None
+    max_consecutive_errors: Optional[int] = None
+    error_rate_threshold: Optional[float] = None
+    error_rate_min_samples: int = 10
 
 
 @dataclass(slots=True)

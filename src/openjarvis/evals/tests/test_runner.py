@@ -8,6 +8,7 @@ import pytest
 
 from openjarvis.evals.core.runner import (
     EvalRunner,
+    TooManyErrorsError,
     _metric_stats,
     _metric_stats_to_dict,
 )
@@ -88,6 +89,80 @@ class TestEvalRunner:
 
         assert summary.total_samples == 3
         assert summary.errors == 1
+
+    def test_fail_fast_max_consecutive_errors(self, tmp_path):
+        records = self._make_records(10)
+        output_path = tmp_path / "results.jsonl"
+
+        config = RunConfig(
+            benchmark="test",
+            backend="mock",
+            model="m",
+            max_workers=1,
+            max_consecutive_errors=3,
+            output_path=str(output_path),
+        )
+
+        class AlwaysFailingBackend(MockBackend):
+            def generate_full(self, prompt, **kw):
+                raise RuntimeError("database disk image is malformed")
+
+        runner = EvalRunner(
+            config, MockDataset(records), AlwaysFailingBackend(), MockScorer()
+        )
+        with pytest.raises(TooManyErrorsError) as excinfo:
+            runner.run()
+
+        assert excinfo.value.error_count == 3
+        assert "max_consecutive_errors" in excinfo.value.reason
+        assert excinfo.value.top_errors[0][1] == 3
+        # Partial JSONL should contain the 3 errored samples
+        lines = output_path.read_text().splitlines()
+        assert len(lines) == 3
+
+    def test_fail_fast_max_errors(self, tmp_path):
+        records = self._make_records(10)
+        output_path = tmp_path / "results.jsonl"
+
+        config = RunConfig(
+            benchmark="test",
+            backend="mock",
+            model="m",
+            max_workers=1,
+            max_errors=2,
+            max_consecutive_errors=None,
+            output_path=str(output_path),
+        )
+
+        class AlwaysFailingBackend(MockBackend):
+            def generate_full(self, prompt, **kw):
+                raise RuntimeError("boom")
+
+        runner = EvalRunner(
+            config, MockDataset(records), AlwaysFailingBackend(), MockScorer()
+        )
+        with pytest.raises(TooManyErrorsError) as excinfo:
+            runner.run()
+        assert excinfo.value.error_count == 2
+        assert "max_errors" in excinfo.value.reason
+
+    def test_fail_fast_not_triggered_when_under_threshold(self, tmp_path):
+        records = self._make_records(5)
+        output_path = tmp_path / "results.jsonl"
+
+        config = RunConfig(
+            benchmark="test",
+            backend="mock",
+            model="m",
+            max_workers=1,
+            max_consecutive_errors=3,
+            output_path=str(output_path),
+        )
+
+        runner = EvalRunner(config, MockDataset(records), MockBackend(), MockScorer())
+        summary = runner.run()
+        assert summary.total_samples == 5
+        assert summary.errors == 0
 
     def test_per_subject_breakdown(self, tmp_path):
         records = self._make_records(4)

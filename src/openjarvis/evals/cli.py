@@ -706,13 +706,21 @@ def _run_single(config, console: Optional[Console] = None) -> object:
                 f"Evaluating samples (0/{num_samples})",
                 total=num_samples,
             )
-            summary = runner.run(
-                progress_callback=lambda done, total: progress.update(
+
+            def _on_progress(done, total, correct, errors):
+                wrong = max(done - correct - errors, 0)
+                progress.update(
                     task,
                     completed=done,
-                    description=f"Evaluating samples ({done}/{total})",
-                ),
-            )
+                    description=(
+                        f"Evaluating samples ({done}/{total}) "
+                        f"[green]ok={correct}[/green] "
+                        f"[yellow]wrong={wrong}[/yellow] "
+                        f"[red]err={errors}[/red]"
+                    ),
+                )
+
+            summary = runner.run(progress_callback=_on_progress)
         return summary
     finally:
         eval_backend.close()
@@ -958,6 +966,10 @@ def _run_from_config(
     *,
     model_filter: str | None = None,
     max_samples: int | None = None,
+    max_errors: int | None = None,
+    max_consecutive_errors: int | None = None,
+    error_rate_threshold: float | None = None,
+    error_rate_min_samples: int = 10,
 ) -> None:
     """Load a TOML config and run the full models x benchmarks matrix."""
     from openjarvis.evals.core.config import expand_suite, load_eval_config
@@ -971,6 +983,16 @@ def _run_from_config(
     if max_samples is not None:
         for rc in run_configs:
             rc.max_samples = max_samples
+
+    # Apply fail-fast overrides to every run in the suite
+    for rc in run_configs:
+        if max_errors is not None:
+            rc.max_errors = max_errors
+        if max_consecutive_errors is not None:
+            rc.max_consecutive_errors = max_consecutive_errors
+        if error_rate_threshold is not None:
+            rc.error_rate_threshold = error_rate_threshold
+        rc.error_rate_min_samples = error_rate_min_samples
 
     # Filter by model name substring if requested
     if model_filter:
@@ -1150,6 +1172,32 @@ def main():
     default=None,
     help="Per-query wall-clock timeout in seconds (AgenticRunner only)",
 )
+@click.option(
+    "--max-errors",
+    type=int,
+    default=None,
+    help="Abort the run after N total errors (default: no limit)",
+)
+@click.option(
+    "--max-consecutive-errors",
+    type=int,
+    default=3,
+    help="Abort sequential runs after N errors in a row (default: 3; set 0 to disable)",
+)
+@click.option(
+    "--error-rate-threshold",
+    type=float,
+    default=0.5,
+    help="Abort when error rate meets/exceeds this fraction after "
+    "--error-rate-min-samples completions (default: 0.5; set 0 to disable)",
+)
+@click.option(
+    "--error-rate-min-samples",
+    type=int,
+    default=10,
+    help="Minimum completed samples before error-rate threshold activates "
+    "(default: 10)",
+)
 @click.option("-v", "--verbose", is_flag=True, help="Verbose logging")
 @click.pass_context
 def run(
@@ -1186,12 +1234,20 @@ def run(
     episode_mode,
     concurrency,
     query_timeout,
+    max_errors,
+    max_consecutive_errors,
+    error_rate_threshold,
+    error_rate_min_samples,
     verbose,
 ):
     """Run a single benchmark evaluation, or a full suite from a TOML config."""
     _setup_logging(verbose)
 
     console = Console()
+
+    # Normalize "0 = disabled" for fail-fast knobs
+    _max_consec = max_consecutive_errors if max_consecutive_errors > 0 else None
+    _err_rate = error_rate_threshold if error_rate_threshold > 0 else None
 
     # Config-driven mode
     if config_path is not None:
@@ -1200,6 +1256,10 @@ def run(
             verbose,
             model_filter=model_filter,
             max_samples=max_samples,
+            max_errors=max_errors,
+            max_consecutive_errors=_max_consec,
+            error_rate_threshold=_err_rate,
+            error_rate_min_samples=error_rate_min_samples,
         )
         return
 
@@ -1255,6 +1315,10 @@ def run(
         sheets_worksheet=sheets_worksheet,
         sheets_credentials_path=sheets_credentials_path,
         episode_mode=episode_mode,
+        max_errors=max_errors,
+        max_consecutive_errors=_max_consec,
+        error_rate_threshold=_err_rate,
+        error_rate_min_samples=error_rate_min_samples,
     )
 
     # Banner + config
@@ -1289,7 +1353,13 @@ def run(
 
     # Evaluation
     print_section(console, "Evaluation")
-    summary = _run_single(config, console=console)
+    from openjarvis.evals.core.runner import TooManyErrorsError
+
+    try:
+        summary = _run_single(config, console=console)
+    except TooManyErrorsError as exc:
+        console.print(f"[red bold]Run aborted:[/red bold] {exc.reason}")
+        ctx.exit(1)
 
     # Results
     _output_path = getattr(summary, "_output_path", None)
@@ -1377,13 +1447,21 @@ def run_all(
                         f"Evaluating {bench_name} (0/{max_samples})",
                         total=max_samples,
                     )
-                    summary = runner.run(
-                        progress_callback=lambda done, total: progress.update(
+
+                    def _on_progress(done, total, correct, errors):
+                        wrong = max(done - correct - errors, 0)
+                        progress.update(
                             task,
                             completed=done,
-                            description=f"Evaluating {bench_name} ({done}/{total})",
-                        ),
-                    )
+                            description=(
+                                f"Evaluating {bench_name} ({done}/{total}) "
+                                f"[green]ok={correct}[/green] "
+                                f"[yellow]wrong={wrong}[/yellow] "
+                                f"[red]err={errors}[/red]"
+                            ),
+                        )
+
+                    summary = runner.run(progress_callback=_on_progress)
             else:
                 with console.status(f"Evaluating {bench_name}..."):
                     summary = runner.run()
