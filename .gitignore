@@ -90,6 +90,12 @@ CLAUDE.md
 research_mining_*
 .python-version
 src/openjarvis/channels/whatsapp_baileys_bridge/node_modules/
+
+# SQLite in-memory artifacts
+:memory:
+
+# Second Repos
+Inline/
 scratch/
 src/openjarvis/evals/configs/*.toml
 draco_Getting Started_dipc_mlbatch-getting-started.md at master · IROC_draco (1).pdf
