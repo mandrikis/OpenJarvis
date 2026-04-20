@@ -1,0 +1,36 @@
+# liveresearchbench evaluation for qwen-2b
+
+[meta]
+name = "liveresearchbench-qwen-2b-pod"
+description = "liveresearchbench on Qwen/Qwen3.5-2B (pod evaluation)"
+
+[defaults]
+temperature = 0.6
+max_tokens = 16384
+
+[judge]
+model = "gpt-4.1-mini"
+temperature = 0.0
+max_tokens = 16384
+engine = "cloud"
+
+[run]
+max_workers = 1
+output_dir = "/tmp/results/qwen-2b/"
+seed = 42
+
+telemetry = true
+gpu_metrics = true
+[engine.vllm]
+host = "http://localhost:8003"
+
+[[models]]
+name = "Qwen/Qwen3.5-2B"
+engine = "vllm"
+
+param_count_b = 2.0
+[[benchmarks]]
+name = "liveresearchbench"
+backend = "jarvis-agent"
+agent = "monitor_operative"
+tools = ["web_search", "file_read", "file_write", "code_interpreter", "think"]

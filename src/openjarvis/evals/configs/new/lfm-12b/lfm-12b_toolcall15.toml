@@ -1,0 +1,33 @@
+# toolcall15 evaluation for lfm-12b
+
+[meta]
+name = "toolcall15-lfm-12b-pod"
+description = "toolcall15 on LFM-12B (pod evaluation)"
+
+[defaults]
+temperature = 0.0
+max_tokens = 16384
+
+[judge]
+model = "gpt-5-mini-2025-08-07"
+temperature = 0.0
+engine = "cloud"
+
+[run]
+max_workers = 1
+output_dir = "/tmp/results/lfm-12b/"
+seed = 42
+
+telemetry = true
+gpu_metrics = true
+[engine.vllm]
+host = "http://localhost:8004"
+
+[[models]]
+name = "LiquidAI/LFM2.5-1.2B-Instruct"
+engine = "vllm"
+
+param_count_b = 1.2
+[[benchmarks]]
+name = "toolcall15"
+backend = "jarvis-direct"

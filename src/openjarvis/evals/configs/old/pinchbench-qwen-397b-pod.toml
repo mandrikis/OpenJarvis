@@ -1,0 +1,37 @@
+# PinchBench eval: Qwen3.5-397B-A17B-FP8 (Pod model server)
+# Agent: native_openhands — all PinchBench-required tools enabled
+
+[meta]
+name = "pinchbench-qwen-397b-pod"
+description = "PinchBench on Qwen/Qwen3.5-397B-A17B-FP8 (Pod server)"
+
+[defaults]
+temperature = 0.6
+max_tokens = 16384
+
+[judge]
+model = "claude-opus-4-5"
+temperature = 0.0
+engine = "cloud"
+
+[run]
+max_workers = 1
+output_dir = "results/neurips-2026/baselines/qwen-397b/pinchbench/"
+seed = 42
+
+[engine.vllm]
+host = "http://localhost:8000"
+
+[[models]]
+name = "Qwen/Qwen3.5-397B-A17B-FP8"
+engine = "vllm"
+
+[[benchmarks]]
+name = "pinchbench"
+backend = "jarvis-agent"
+agent = "native_openhands"
+tools = [
+    "think", "file_read", "file_write", "web_search", "shell_exec",
+    "code_interpreter", "browser_navigate", "image_generate",
+    "calculator", "http_request", "pdf_extract",
+]

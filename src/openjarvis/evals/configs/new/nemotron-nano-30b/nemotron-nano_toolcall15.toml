@@ -1,0 +1,34 @@
+# toolcall15 evaluation for nemotron-nano
+
+[meta]
+name = "toolcall15-nemotron-nano-pod"
+description = "toolcall15 on Nemotron-Nano-4B-FP8 (pod evaluation)"
+
+[defaults]
+temperature = 0.0
+max_tokens = 16384
+
+[judge]
+model = "gpt-5-mini-2025-08-07"
+temperature = 0.0
+engine = "cloud"
+
+[run]
+max_workers = 1
+output_dir = "/tmp/results/nemotron-nano-30b/"
+seed = 42
+
+telemetry = true
+gpu_metrics = true
+[engine.vllm]
+host = "http://localhost:8004"
+
+[[models]]
+name = "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16"
+engine = "vllm"
+
+param_count_b = 31.6
+active_params_b = 3.6
+[[benchmarks]]
+name = "toolcall15"
+backend = "jarvis-direct"

@@ -1,0 +1,35 @@
+# taubench evaluation for trinity-large
+
+[meta]
+name = "taubench-trinity-large-pod"
+description = "taubench on Trinity-Large (pod evaluation)"
+
+[defaults]
+temperature = 0.7
+max_tokens = 16384
+
+[judge]
+model = "gpt-5-mini-2025-08-07"
+temperature = 0.0
+engine = "cloud"
+
+[run]
+max_workers = 1
+output_dir = "/tmp/results/trinity-large/"
+seed = 42
+
+telemetry = true
+gpu_metrics = true
+[engine.vllm]
+host = "http://localhost:8000"
+
+[[models]]
+name = "arcee-ai/Trinity-Large-Thinking-FP8-Block"
+engine = "vllm"
+
+param_count_b = 398.0
+active_params_b = 13.0
+[[benchmarks]]
+name = "taubench"
+backend = "jarvis-direct"
+split = "airline,retail"

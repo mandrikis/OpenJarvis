@@ -1,0 +1,30 @@
+# TauBench V2 eval: Qwen3.5-397B-A17B-FP8 (Pod model server - OpenAI compatible)
+
+[meta]
+name = "taubench-qwen-397b-pod"
+description = "TauBench V2 on Qwen/Qwen3.5-397B-A17B-FP8 (Pod server)"
+
+[defaults]
+temperature = 0.7
+max_tokens = 16384
+
+[judge]
+model = "claude-opus-4-5"
+temperature = 0.0
+engine = "cloud"
+
+[run]
+max_workers = 1
+output_dir = "results/neurips-2026/baselines/qwen-397b/taubench/"
+seed = 42
+
+[[models]]
+name = "Qwen/Qwen3.5-397B-A17B-FP8"
+engine = "vllm"
+num_gpus = 8
+
+[[benchmarks]]
+name = "taubench"
+backend = "jarvis-direct"
+max_samples = 20
+split = "airline,retail"

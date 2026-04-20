@@ -1,0 +1,33 @@
+# livecodebench evaluation for qwen-2b
+
+[meta]
+name = "livecodebench-qwen-2b-pod"
+description = "livecodebench on Qwen/Qwen3.5-2B (pod evaluation)"
+
+[defaults]
+temperature = 0.0
+max_tokens = 16384
+
+[judge]
+model = "gpt-5-mini-2025-08-07"
+temperature = 0.0
+engine = "cloud"
+
+[run]
+max_workers = 1
+output_dir = "/tmp/results/qwen-2b/"
+seed = 42
+
+telemetry = true
+gpu_metrics = true
+[engine.vllm]
+host = "http://localhost:8003"
+
+[[models]]
+name = "Qwen/Qwen3.5-2B"
+engine = "vllm"
+
+param_count_b = 2.0
+[[benchmarks]]
+name = "livecodebench"
+backend = "jarvis-direct"

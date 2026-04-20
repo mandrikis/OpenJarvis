@@ -1,0 +1,33 @@
+# livecodebench evaluation for nemotron-nano
+
+[meta]
+name = "livecodebench-nemotron-nano-pod"
+description = "livecodebench on Nemotron-Nano-4B-FP8 (pod evaluation)"
+
+[defaults]
+temperature = 0.0
+max_tokens = 16384
+
+[judge]
+model = "gpt-5-mini-2025-08-07"
+temperature = 0.0
+engine = "cloud"
+
+[run]
+max_workers = 1
+output_dir = "/tmp/results/nemotron-nano-4b-fp8/"
+seed = 42
+
+telemetry = true
+gpu_metrics = true
+[engine.vllm]
+host = "http://localhost:8007"
+
+[[models]]
+name = "nvidia/NVIDIA-Nemotron-3-Nano-4B-FP8"
+engine = "vllm"
+
+param_count_b = 4.0
+[[benchmarks]]
+name = "livecodebench"
+backend = "jarvis-direct"

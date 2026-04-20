@@ -1,0 +1,34 @@
+# toolcall15 evaluation for minimax-m25
+
+[meta]
+name = "toolcall15-minimax-m25-pod"
+description = "toolcall15 on MiniMaxAI/MiniMax-M2.5 (pod evaluation)"
+
+[defaults]
+temperature = 0.0
+max_tokens = 16384
+
+[judge]
+model = "gpt-5-mini-2025-08-07"
+temperature = 0.0
+engine = "cloud"
+
+[run]
+max_workers = 1
+output_dir = "/tmp/results/minimax-m25/"
+seed = 42
+
+telemetry = true
+gpu_metrics = true
+[engine.vllm]
+host = "http://localhost:8006"
+
+[[models]]
+name = "MiniMaxAI/MiniMax-M2.5"
+engine = "vllm"
+
+param_count_b = 229.0
+active_params_b = 10.0
+[[benchmarks]]
+name = "toolcall15"
+backend = "jarvis-direct"

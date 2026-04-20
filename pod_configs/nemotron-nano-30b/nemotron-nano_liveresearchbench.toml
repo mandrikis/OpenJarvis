@@ -1,0 +1,37 @@
+# liveresearchbench evaluation for nemotron-nano
+
+[meta]
+name = "liveresearchbench-nemotron-nano-pod"
+description = "liveresearchbench on Nemotron-Nano-4B-FP8 (pod evaluation)"
+
+[defaults]
+temperature = 0.6
+max_tokens = 16384
+
+[judge]
+model = "gpt-4.1-mini"
+temperature = 0.0
+max_tokens = 16384
+engine = "cloud"
+
+[run]
+max_workers = 1
+output_dir = "/tmp/results/nemotron-nano-30b/"
+seed = 42
+
+telemetry = true
+gpu_metrics = true
+[engine.vllm]
+host = "http://localhost:8004"
+
+[[models]]
+name = "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16"
+engine = "vllm"
+
+param_count_b = 31.6
+active_params_b = 3.6
+[[benchmarks]]
+name = "liveresearchbench"
+backend = "jarvis-agent"
+agent = "monitor_operative"
+tools = ["web_search", "file_read", "file_write", "code_interpreter", "think"]

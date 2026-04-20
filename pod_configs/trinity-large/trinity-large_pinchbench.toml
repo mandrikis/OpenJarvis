@@ -1,0 +1,40 @@
+# pinchbench evaluation for trinity-large
+
+[meta]
+name = "pinchbench-trinity-large-pod"
+description = "pinchbench on Trinity-Large (pod evaluation)"
+
+[defaults]
+temperature = 0.6
+max_tokens = 16384
+
+[judge]
+model = "claude-opus-4-5"
+temperature = 0.0
+engine = "cloud"
+
+[run]
+max_workers = 1
+output_dir = "/tmp/results/trinity-large/"
+seed = 42
+
+telemetry = true
+gpu_metrics = true
+[engine.vllm]
+host = "http://localhost:8000"
+
+[[models]]
+name = "arcee-ai/Trinity-Large-Thinking-FP8-Block"
+engine = "vllm"
+
+param_count_b = 398.0
+active_params_b = 13.0
+[[benchmarks]]
+name = "pinchbench"
+backend = "jarvis-agent"
+agent = "native_openhands"
+tools = [
+    "think", "file_read", "file_write", "web_search", "shell_exec",
+    "code_interpreter", "browser_navigate", "image_generate",
+    "calculator", "http_request", "pdf_extract",
+]
