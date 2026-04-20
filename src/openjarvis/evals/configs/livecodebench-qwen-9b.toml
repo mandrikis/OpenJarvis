@@ -1,4 +1,6 @@
 # LiveCodeBench eval: Qwen3.5-9B (vLLM, 1 GPU)
+# Competitive programming from LeetCode, AtCoder, CodeForces
+
 [meta]
 name = "livecodebench-qwen-9b"
 description = "LiveCodeBench on Qwen/Qwen3.5-9B (vLLM, 1 GPU)"
@@ -11,7 +13,6 @@ max_tokens = 4096
 model = "gpt-5-mini-2025-08-07"
 temperature = 0.0
 engine = "cloud"
-max_tokens = 4096
 
 [run]
 max_workers = 1

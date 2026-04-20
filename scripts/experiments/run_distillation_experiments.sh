@@ -3,17 +3,13 @@
 # Run distillation ablation experiments
 #
 # Prerequisites:
+#   - Ollama running with qwen3.5:{2b,9b,27b}
 #   - ANTHROPIC_API_KEY set (for Opus teacher)
 #   - OPENAI_API_KEY set (for GPT-5.4 teacher)
 #   - GOOGLE_API_KEY set (for Gemini teacher)
 #   - For Qwen-397B teacher: vLLM serving on port 8010 with 8×H100
 #   - Traces seeded with feedback (run A1 blocker first)
 #   - jarvis learning init already run
-#
-# Note: in the current M1 runner the student is a MagicMock and is not
-# actually invoked by the orchestrator, so no student serving layer is
-# required. If students are made real (M2), run vLLM on ports 8000/8001/8002
-# for Qwen3.5-2B / 9B / 27B-FP8 respectively (matching the generated configs).
 #
 # Usage:
 #   bash scripts/experiments/run_distillation_experiments.sh               # Run all
@@ -55,11 +51,16 @@ check_prereqs() {
         warn "GOOGLE_API_KEY not set — Gemini teacher experiments will fail"
     fi
 
-    # Check vLLM student servers (non-fatal — M1 student is mocked)
-    # Expected layout: 2B on :8000, 9B on :8001, 27B-FP8 on :8002
-    for port in 8000 8001 8002; do
-        if ! curl -sf "http://localhost:${port}/v1/models" >/dev/null 2>&1; then
-            warn "vLLM student server on port ${port} not responding (OK for M1 — student is mocked)"
+    # Check Ollama
+    if ! ollama list &>/dev/null; then
+        fail "Ollama not running. Start it first."
+        exit 1
+    fi
+
+    # Check student models
+    for model in qwen3.5:2b qwen3.5:9b qwen3.5:27b; do
+        if ! ollama list 2>/dev/null | grep -q "$model"; then
+            warn "Model $model not found in Ollama. Pull with: ollama pull $model"
         fi
     done
 
@@ -130,36 +131,56 @@ run_session() {
         # Run the distillation session via Python
         # (jarvis learning run doesn't support all config params yet,
         #  so we call the orchestrator directly)
-        .venv/bin/python << PYEOF > "${session_output}/run.log" 2>&1 || true
+        uv run python << PYEOF > "${session_output}/run.log" 2>&1 || true
 import json, os, shutil, sys
 from pathlib import Path
-from unittest.mock import MagicMock
 
 from openjarvis.engine.cloud import CloudEngine
+from openjarvis.evals.backends.jarvis_direct import JarvisDirectBackend
 from openjarvis.traces.store import TraceStore
 from openjarvis.learning.distillation.checkpoint.store import CheckpointStore
 from openjarvis.learning.distillation.models import AutonomyMode
 from openjarvis.learning.distillation.orchestrator import DistillationOrchestrator
 from openjarvis.learning.distillation.storage.session_store import SessionStore
+from openjarvis.learning.distillation.student_runner import (
+    VLLMStudentRunner,
+    build_benchmark_samples_from_traces,
+)
 from openjarvis.learning.distillation.triggers import OnDemandTrigger
+from openjarvis.learning.optimize.feedback.judge import TraceJudge
 
-# Respect OPENJARVIS_HOME so M1 runs can be isolated from the canonical
-# ~/.openjarvis (which may be on a shared filesystem with other writers).
 home = Path(os.environ.get("OPENJARVIS_HOME", str(Path.home() / ".openjarvis")))
 
 # Read config params
 teacher_model = "${teacher_model}"
+student_model = "${student_model}"
 autonomy = "auto"
 max_cost = float("$(grep 'max_cost_per_session_usd' "$config_file" | head -1 | sed 's/.*= *//')")
 max_tools = int("$(grep 'max_tool_calls_per_diagnosis' "$config_file" | head -1 | sed 's/.*= *//')")
 
+# Real student runner via vLLM
+vllm_host = os.environ.get("VLLM_HOST", "http://localhost:8001")
+student_runner = VLLMStudentRunner(
+    host=vllm_host,
+    model=student_model,
+)
+
+# Real judge via cloud LLM
+cloud_engine = CloudEngine()
+judge_backend = JarvisDirectBackend(engine_key="cloud")
+judge = TraceJudge(backend=judge_backend, model="gpt-5-mini-2025-08-07")
+
+# Build benchmark samples from existing traces
+trace_store = TraceStore(home / "traces.db")
+benchmark_samples = build_benchmark_samples_from_traces(trace_store, limit=50)
+
 orch = DistillationOrchestrator(
-    teacher_engine=CloudEngine(),
+    teacher_engine=cloud_engine,
     teacher_model=teacher_model,
-    trace_store=TraceStore(home / "traces.db"),
-    benchmark_samples=[],
-    student_runner=MagicMock(),
-    judge=MagicMock(score_trace=MagicMock(return_value=(0.5, "mock"))),
+    trace_store=trace_store,
+    benchmark_samples=benchmark_samples,
+    student_runner=student_runner,
+    judge=judge,
     session_store=SessionStore(home / "learning" / "learning.db"),
     checkpoint_store=CheckpointStore(home),
     openjarvis_home=home,
