@@ -18,6 +18,7 @@ import json
 import logging
 import math
 import re
+import shutil
 import statistics
 import time
 from collections import defaultdict
@@ -322,6 +323,12 @@ class EvalRunner:
                 json.dump(_summary_to_dict(summary), f, indent=2)
             LOGGER.info("Results written to %s", output_path)
             LOGGER.info("Summary written to %s", summary_path)
+
+            # Copy config file if available
+            if self._config.config_path:
+                config_dest = output_path.parent / "run_config.toml"
+                shutil.copy2(self._config.config_path, config_dest)
+                LOGGER.info("Config copied to %s", config_dest)
 
             # Write per-trace data
             traces_dir = self._write_traces(output_path)

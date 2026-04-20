@@ -20,6 +20,7 @@ class JarvisDirectBackend(InferenceBackend):
     def __init__(
         self,
         engine_key: Optional[str] = None,
+        engine_config: Optional[Dict[str, Any]] = None,
         telemetry: bool = False,
         gpu_metrics: bool = False,
     ) -> None:
@@ -31,6 +32,16 @@ class JarvisDirectBackend(InferenceBackend):
         builder = SystemBuilder()
         if engine_key:
             builder.engine(engine_key)
+
+        # Apply engine-specific config overrides from eval TOML
+        if engine_config and engine_key:
+            # Apply engine config to the builder's config
+            # For vllm: config.engine.vllm_host
+            # For ollama: config.engine.ollama_host, etc.
+            host_attr = f"{engine_key}_host"
+            if "host" in engine_config:
+                setattr(builder._config.engine, host_attr, engine_config["host"])
+
         # Propagate gpu_metrics to the runtime config so SystemBuilder
         # creates an EnergyMonitor / GpuMonitor for the InstrumentedEngine.
         if gpu_metrics:

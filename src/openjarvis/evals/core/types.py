@@ -67,6 +67,7 @@ class RunConfig:
     judge_model: str = "gpt-5-mini-2025-08-07"
     judge_engine: str = "cloud"
     engine_key: Optional[str] = None
+    engine_config: Dict[str, Any] = field(default_factory=dict)
     agent_name: Optional[str] = None
     tools: List[str] = field(default_factory=list)
     output_path: Optional[str] = None
@@ -87,6 +88,8 @@ class RunConfig:
     system_prompt: str = ""
     episode_mode: bool = False
     dataset_subset: Optional[str] = None
+    # Path to the original config file used for this run
+    config_path: Optional[str] = None
     # Override the agent harness's max_turns budget. Default None means use
     # the JarvisConfig.agent.max_turns value (typically 10). Set higher when
     # running thinking/reasoning models that consume turns on intermediate
@@ -259,6 +262,7 @@ class EvalSuiteConfig:
     run: ExecutionConfig = field(default_factory=ExecutionConfig)
     models: List[ModelConfig] = field(default_factory=list)
     benchmarks: List[BenchmarkConfig] = field(default_factory=list)
+    engine_configs: Dict[str, Dict[str, Any]] = field(default_factory=dict)
 
 
 __all__ = [
