@@ -233,47 +233,10 @@ def _build_praise_prompt(author: str, tweet_id: str, text: str) -> str:
     )
 
 
-_BUG_KEYWORDS = (
-    "bug:", "bug ", "crash", "error", "fails", "broken", "segfault",
-)
-_FEATURE_KEYWORDS = (
-    "feature", "would love", "would be great", "wish",
-    "please add", "can you add", "any plans",
-)
-_PRAISE_KEYWORDS = (
-    "love", "amazing", "awesome", "impressed",
-    "great work", "switched from", "incredible",
-)
-_SPAM_KEYWORDS = (
-    "buy", "crypto", "income", "free download",
-    "link in bio", "10x", "guaranteed",
-)
-
-
 _CLASSIFIER_MODEL = "qwen3:8b"
 _CLASSIFY_LABELS = frozenset({
     "QUESTION", "BUG_REPORT", "FEATURE_REQUEST", "PRAISE", "SPAM", "OTHER",
 })
-
-
-def _classify_mention_keyword(text: str) -> str:
-    """Cheap keyword classifier — deterministic, no model call.
-
-    Used as the fallback when the LLM classifier is unavailable or
-    returns an invalid label. Brittle on natural phrasing ("broken"
-    without "bug", commas after "bug,", etc.) — the LLM classifier
-    is meant to cover those.
-    """
-    lower = text.lower()
-    if any(w in lower for w in _BUG_KEYWORDS):
-        return "BUG_REPORT"
-    if any(w in lower for w in _FEATURE_KEYWORDS):
-        return "FEATURE_REQUEST"
-    if any(w in lower for w in _PRAISE_KEYWORDS):
-        return "PRAISE"
-    if any(w in lower for w in _SPAM_KEYWORDS):
-        return "SPAM"
-    return "QUESTION"
 
 
 _CLASSIFIER_PROMPT = (
@@ -310,9 +273,11 @@ def _classify_mention_llm(
     *,
     model: str = _CLASSIFIER_MODEL,
 ) -> Optional[str]:
-    """Model-based classifier. Returns a validated label or ``None``.
+    """Call the classifier model and return a validated label or ``None``.
 
-    ``None`` signals the caller to fall back to the keyword classifier.
+    ``None`` means the model call failed outright, the response was
+    empty, or the output didn't match any valid label — in any of
+    those cases the caller will fall through to the safe default.
     """
     try:
         response = jarvis.ask(
@@ -340,38 +305,23 @@ def _classify_mention_llm(
     return first if first in _CLASSIFY_LABELS else None
 
 
-def _classify_mention(text: str, jarvis=None) -> str:
-    """Model-based classifier with keyword fallback.
+def _classify_mention(text: str, jarvis) -> str:
+    """LLM-only classifier. Returns one of the 5 bot-flow labels.
 
-    When *jarvis* is None (tests, tooling), falls through to the
-    keyword classifier — preserves the original single-arg signature.
+    Calls the classifier model (``qwen3:8b`` by default) and maps its
+    output to one of the labels the bot's flow handles:
+    ``QUESTION, BUG_REPORT, FEATURE_REQUEST, PRAISE, SPAM``.
 
-    When *jarvis* is provided, runs both and returns the LLM label if
-    valid; otherwise the keyword result. Disagreements are echoed so
-    we can audit how often the model wins.
-
-    The LLM may return ``OTHER`` (e.g. "hahaha", "just saying hi"); we
-    map that to ``QUESTION`` because the question path has graceful
-    deferral for low-retrieval-score content — the right safe default
-    without introducing a new bot flow.
+    ``OTHER`` and any failure (model down, invalid label, empty
+    response) both collapse to ``QUESTION`` — that path runs dense
+    retrieval and gracefully defers on low retrieval scores, so the
+    bot can never "confidently" misclassify into a write-path
+    (BUG_REPORT/FEATURE_REQUEST) on bad classifier output.
     """
-    kw_label = _classify_mention_keyword(text)
-    if jarvis is None:
-        return kw_label
-
     llm_label = _classify_mention_llm(text, jarvis)
-    if llm_label is None:
-        return kw_label  # fallback
-
-    effective = "QUESTION" if llm_label == "OTHER" else llm_label
-
-    if llm_label != kw_label:
-        click.echo(
-            f"     classifier: kw={kw_label}  llm={llm_label}  "
-            f"(using llm={effective})",
-        )
-
-    return effective
+    if llm_label is None or llm_label == "OTHER":
+        return "QUESTION"
+    return llm_label
 
 
 def _resolve_question_prompt(backend, author: str, tweet_id: str, text: str):
