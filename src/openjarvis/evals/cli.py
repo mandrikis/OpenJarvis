@@ -174,7 +174,6 @@ def _build_backend(
     gpu_metrics: bool = False,
     model: Optional[str] = None,
     max_turns: Optional[int] = None,
-    output_dir: Optional[Path] = None,
 ):
     """Construct the appropriate backend."""
     if backend_name == "jarvis-agent":
@@ -188,7 +187,6 @@ def _build_backend(
             gpu_metrics=gpu_metrics,
             model=model,
             max_turns=max_turns,
-            output_dir=output_dir,
         )
     else:
         from openjarvis.evals.backends.jarvis_direct import JarvisDirectBackend
@@ -351,10 +349,10 @@ def _build_dataset(benchmark: str, subset: str | None = None):
         return LiveResearchBenchDataset(path=subset)
     elif benchmark == "liveresearchbench":
         from openjarvis.evals.datasets.liveresearchbench import (
-            LiveResearchBenchSFDataset,
+            LiveResearchBenchDataset as LRBDataset,
         )
 
-        return LiveResearchBenchSFDataset()
+        return LRBDataset()
     elif benchmark == "toolcall15":
         from openjarvis.evals.datasets.toolcall15 import ToolCall15Dataset
 
@@ -509,10 +507,10 @@ def _build_scorer(benchmark: str, judge_backend, judge_model: str):
         return LiveResearchBenchScorer(judge_backend, judge_model)
     elif benchmark == "liveresearchbench":
         from openjarvis.evals.scorers.liveresearchbench import (
-            LiveResearchBenchSFScorer,
+            LiveResearchBenchScorer as LRBScorer,
         )
 
-        return LiveResearchBenchSFScorer(judge_backend, judge_model)
+        return LRBScorer(judge_backend, judge_model)
     elif benchmark == "toolcall15":
         from openjarvis.evals.scorers.toolcall15 import ToolCall15Scorer
 
@@ -667,17 +665,6 @@ def _run_single(config, console: Optional[Console] = None) -> object:
     if config.benchmark == "terminalbench-native":
         return _run_terminalbench_native(config, console)
 
-    # Per-eval DB isolation for the agent backend: drop traces.db / agents.db
-    # next to the run's JSONL output instead of the global ~/.openjarvis copy,
-    # so parallel eval processes can't corrupt each other's SQLite files.
-    eval_output_dir: Optional[Path] = None
-    if config.backend == "jarvis-agent":
-        if config.output_path:
-            eval_output_dir = Path(config.output_path).parent
-        else:
-            model_slug = config.model.replace("/", "-").replace(":", "-")
-            eval_output_dir = Path("results") / f"{config.benchmark}_{model_slug}"
-
     eval_backend = _build_backend(
         config.backend,
         config.engine_key,
@@ -687,7 +674,6 @@ def _run_single(config, console: Optional[Console] = None) -> object:
         gpu_metrics=getattr(config, "gpu_metrics", False),
         model=config.model,
         max_turns=getattr(config, "max_turns", None),
-        output_dir=eval_output_dir,
     )
     dataset = _build_dataset(config.benchmark)
     # Inject engine config for benchmarks that run their own simulation
@@ -707,34 +693,27 @@ def _run_single(config, console: Optional[Console] = None) -> object:
     trackers = _build_trackers(config)
     runner = EvalRunner(config, dataset, eval_backend, scorer, trackers=trackers)
     try:
-        num_samples = config.max_samples or dataset.size()
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            BarColumn(),
-            TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-            TimeRemainingColumn(),
-            console=console,
-        ) as progress:
-            task = progress.add_task(
-                f"Evaluating samples (0/{num_samples})",
-                total=num_samples,
-            )
-
-            def _on_progress(done, total, correct, errors):
-                wrong = max(done - correct - errors, 0)
-                progress.update(
-                    task,
-                    completed=done,
-                    description=(
-                        f"Evaluating samples ({done}/{total}) "
-                        f"[green]ok={correct}[/green] "
-                        f"[yellow]wrong={wrong}[/yellow] "
-                        f"[red]err={errors}[/red]"
+        num_samples = config.max_samples or 0
+        # Use progress bar if we know the sample count
+        if num_samples > 0:
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                BarColumn(),
+                TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+                TimeRemainingColumn(),
+                console=console,
+            ) as progress:
+                task = progress.add_task("Evaluating samples...", total=num_samples)
+                summary = runner.run(
+                    progress_callback=lambda done, total: progress.update(
+                        task,
+                        completed=done,
                     ),
                 )
-
-            summary = runner.run(progress_callback=_on_progress)
+        else:
+            with console.status("Evaluating samples..."):
+                summary = runner.run()
         return summary
     finally:
         eval_backend.close()
@@ -795,17 +774,6 @@ def _run_agentic(
                 "Fix the issues above and retry."
             )
 
-    # Set up run directory FIRST so we can route the agent's SQLite DBs
-    # (traces.db, agents.db) into it — otherwise every parallel eval shares
-    # ~/.openjarvis/traces.db and corrupts it.
-    model_slug = config.model.replace("/", "-").replace(":", "-")
-    if config.output_path:
-        run_dir = _Path(config.output_path).parent
-    else:
-        run_dir = _Path("results")
-    run_dir = run_dir / f"agentic_{config.benchmark}_{model_slug}"
-    run_dir.mkdir(parents=True, exist_ok=True)
-
     # Build agent via SystemBuilder
     from openjarvis.system import SystemBuilder
 
@@ -818,10 +786,6 @@ def _run_agentic(
     tool_list = config.tools or []
     if tool_list:
         builder.tools(tool_list)
-    # Eval-only DB isolation (mirrors JarvisAgentBackend); production
-    # SystemBuilder callers do not touch these paths.
-    builder._config.traces.db_path = str(run_dir / "traces.db")
-    builder._config.agent_manager.db_path = str(run_dir / "agents.db")
     system = builder.telemetry(config.telemetry).traces(config.telemetry).build()
 
     # Build TelemetrySession (optional — only if energy monitoring available)
@@ -838,6 +802,15 @@ def _run_agentic(
             )
     except ImportError:
         pass
+
+    # Set up run directory
+    model_slug = config.model.replace("/", "-").replace(":", "-")
+    if config.output_path:
+        run_dir = _Path(config.output_path).parent
+    else:
+        run_dir = _Path("results")
+    run_dir = run_dir / f"agentic_{config.benchmark}_{model_slug}"
+    run_dir.mkdir(parents=True, exist_ok=True)
 
     # Build runner
     event_recorder = EventRecorder()
@@ -985,11 +958,6 @@ def _run_from_config(
     verbose: bool,
     *,
     model_filter: str | None = None,
-    max_samples: int | None = None,
-    max_errors: int | None = None,
-    max_consecutive_errors: int | None = None,
-    error_rate_threshold: float | None = None,
-    error_rate_min_samples: int = 10,
 ) -> None:
     """Load a TOML config and run the full models x benchmarks matrix."""
     from openjarvis.evals.core.config import expand_suite, load_eval_config
@@ -998,21 +966,6 @@ def _run_from_config(
 
     suite = load_eval_config(config_path)
     run_configs = expand_suite(suite)
-
-    # CLI -n/--max-samples overrides config-level max_samples
-    if max_samples is not None:
-        for rc in run_configs:
-            rc.max_samples = max_samples
-
-    # Apply fail-fast overrides to every run in the suite
-    for rc in run_configs:
-        if max_errors is not None:
-            rc.max_errors = max_errors
-        if max_consecutive_errors is not None:
-            rc.max_consecutive_errors = max_consecutive_errors
-        if error_rate_threshold is not None:
-            rc.error_rate_threshold = error_rate_threshold
-        rc.error_rate_min_samples = error_rate_min_samples
 
     # Filter by model name substring if requested
     if model_filter:
@@ -1192,32 +1145,6 @@ def main():
     default=None,
     help="Per-query wall-clock timeout in seconds (AgenticRunner only)",
 )
-@click.option(
-    "--max-errors",
-    type=int,
-    default=None,
-    help="Abort the run after N total errors (default: no limit)",
-)
-@click.option(
-    "--max-consecutive-errors",
-    type=int,
-    default=3,
-    help="Abort sequential runs after N errors in a row (default: 3; set 0 to disable)",
-)
-@click.option(
-    "--error-rate-threshold",
-    type=float,
-    default=0.5,
-    help="Abort when error rate meets/exceeds this fraction after "
-    "--error-rate-min-samples completions (default: 0.5; set 0 to disable)",
-)
-@click.option(
-    "--error-rate-min-samples",
-    type=int,
-    default=10,
-    help="Minimum completed samples before error-rate threshold activates "
-    "(default: 10)",
-)
 @click.option("-v", "--verbose", is_flag=True, help="Verbose logging")
 @click.pass_context
 def run(
@@ -1254,10 +1181,6 @@ def run(
     episode_mode,
     concurrency,
     query_timeout,
-    max_errors,
-    max_consecutive_errors,
-    error_rate_threshold,
-    error_rate_min_samples,
     verbose,
 ):
     """Run a single benchmark evaluation, or a full suite from a TOML config."""
@@ -1265,22 +1188,9 @@ def run(
 
     console = Console()
 
-    # Normalize "0 = disabled" for fail-fast knobs
-    _max_consec = max_consecutive_errors if max_consecutive_errors > 0 else None
-    _err_rate = error_rate_threshold if error_rate_threshold > 0 else None
-
     # Config-driven mode
     if config_path is not None:
-        _run_from_config(
-            config_path,
-            verbose,
-            model_filter=model_filter,
-            max_samples=max_samples,
-            max_errors=max_errors,
-            max_consecutive_errors=_max_consec,
-            error_rate_threshold=_err_rate,
-            error_rate_min_samples=error_rate_min_samples,
-        )
+        _run_from_config(config_path, verbose, model_filter=model_filter)
         return
 
     # CLI-driven mode: validate required args
@@ -1335,10 +1245,6 @@ def run(
         sheets_worksheet=sheets_worksheet,
         sheets_credentials_path=sheets_credentials_path,
         episode_mode=episode_mode,
-        max_errors=max_errors,
-        max_consecutive_errors=_max_consec,
-        error_rate_threshold=_err_rate,
-        error_rate_min_samples=error_rate_min_samples,
     )
 
     # Banner + config
@@ -1373,13 +1279,7 @@ def run(
 
     # Evaluation
     print_section(console, "Evaluation")
-    from openjarvis.evals.core.runner import TooManyErrorsError
-
-    try:
-        summary = _run_single(config, console=console)
-    except TooManyErrorsError as exc:
-        console.print(f"[red bold]Run aborted:[/red bold] {exc.reason}")
-        ctx.exit(1)
+    summary = _run_single(config, console=console)
 
     # Results
     _output_path = getattr(summary, "_output_path", None)
@@ -1464,24 +1364,15 @@ def run_all(
                     console=console,
                 ) as progress:
                     task = progress.add_task(
-                        f"Evaluating {bench_name} (0/{max_samples})",
+                        f"Evaluating {bench_name}...",
                         total=max_samples,
                     )
-
-                    def _on_progress(done, total, correct, errors):
-                        wrong = max(done - correct - errors, 0)
-                        progress.update(
+                    summary = runner.run(
+                        progress_callback=lambda done, total: progress.update(
                             task,
                             completed=done,
-                            description=(
-                                f"Evaluating {bench_name} ({done}/{total}) "
-                                f"[green]ok={correct}[/green] "
-                                f"[yellow]wrong={wrong}[/yellow] "
-                                f"[red]err={errors}[/red]"
-                            ),
-                        )
-
-                    summary = runner.run(progress_callback=_on_progress)
+                        ),
+                    )
             else:
                 with console.status(f"Evaluating {bench_name}..."):
                     summary = runner.run()
