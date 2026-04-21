@@ -145,7 +145,10 @@ def build_diagnostic_tools(
             return json.dumps(
                 {
                     "error": f"search_traces failed: {e}",
-                    "hint": "FTS5 special chars (- / . : etc) need escaping. Try a simpler keyword query.",
+                    "hint": (
+                        "FTS5 special chars (- / . : etc) need escaping. "
+                        "Try a simpler keyword query."
+                    ),
                 }
             )
         # Truncate per-trace text fields. Each trace's `result` column can be
