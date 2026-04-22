@@ -46,7 +46,8 @@ Thumbs.db
 *.jsonl
 *.npz
 *.log
-results/
+/results
+/results/
 logs/
 traces/
 coding_task_*
