@@ -130,6 +130,9 @@ def run_dspy(
     num_candidate_programs: int,
     teacher_lm_name: str,
     output_dir: str,
+    vllm_port: int = 8000,
+    benchmark_subset: str | None = None,
+    teacher_api_base: str | None = None,
 ) -> dict:
     """Run DSPy optimization and return results."""
     import dspy
@@ -144,7 +147,7 @@ def run_dspy(
     if engine_key == "vllm":
         task_lm = dspy.LM(
             f"openai/{model}",
-            api_base="http://localhost:8000/v1",
+            api_base=f"http://localhost:{vllm_port}/v1",
             api_key="dummy",
         )
     elif engine_key == "cloud":
@@ -157,7 +160,15 @@ def run_dspy(
         )
 
     # Teacher LM: strong model for bootstrapping demonstrations
-    teacher_lm = dspy.LM(teacher_lm_name)
+    # Supports local vLLM teachers via --teacher-api-base
+    if teacher_api_base:
+        teacher_lm = dspy.LM(
+            f"openai/{teacher_lm_name}",
+            api_base=teacher_api_base,
+            api_key="dummy",
+        )
+    else:
+        teacher_lm = dspy.LM(teacher_lm_name)
 
     dspy.configure(lm=task_lm)
 
@@ -177,6 +188,8 @@ def run_dspy(
         benchmark=benchmark,
         engine_key=engine_key,
         max_samples=max_eval_samples,
+        vllm_port=vllm_port,
+        benchmark_subset=benchmark_subset,
     )
 
     eval_log: list[dict] = []
@@ -238,6 +251,7 @@ def run_dspy(
             optimized_program = optimizer.compile(
                 program,
                 trainset=trainset,
+                requires_permission_to_run=False,
             )
         elif method == "simba":
             optimizer = dspy.SIMBA(
@@ -375,6 +389,10 @@ def main() -> None:
         "--teacher-lm", default="anthropic/claude-sonnet-4-6",
     )
     parser.add_argument("--output-dir", required=True)
+    parser.add_argument("--vllm-port", type=int, default=8000, help="vLLM server port")
+    parser.add_argument("--benchmark-subset", default=None, help="Benchmark subset (e.g. telecom for taubench)")
+    parser.add_argument("--teacher-api-base", default=None,
+                        help="API base for teacher (e.g. http://localhost:8002/v1). If set, --teacher-lm is used as model name against this base.")
     args = parser.parse_args()
 
     result = run_dspy(
@@ -389,6 +407,9 @@ def main() -> None:
         num_candidate_programs=args.num_candidate_programs,
         teacher_lm_name=args.teacher_lm,
         output_dir=args.output_dir,
+        vllm_port=args.vllm_port,
+        benchmark_subset=args.benchmark_subset,
+        teacher_api_base=args.teacher_api_base,
     )
 
     if result["status"] == "completed":

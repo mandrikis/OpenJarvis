@@ -1,3 +1,1 @@
-TEST FILE
-This is a test.
-Line 3.
+test

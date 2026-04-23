@@ -73,10 +73,14 @@ class LiveEvaluator:
         judge_model: str = "gpt-5-mini-2025-08-07",
         seed: int = 42,
         output_dir: str = "/tmp/optimization_evals",
+        vllm_port: int = 8000,
+        benchmark_subset: Optional[str] = None,
     ) -> None:
         self.model = model
         self.benchmark = benchmark
+        self.benchmark_subset = benchmark_subset
         self.engine_key = engine_key
+        self.vllm_port = vllm_port
         self.max_samples = max_samples
         self.judge_model = judge_model
         self.seed = seed
@@ -95,7 +99,7 @@ class LiveEvaluator:
     # Public API
     # ------------------------------------------------------------------
 
-    def evaluate(self, candidate: Dict[str, Any]) -> float:
+    def evaluate(self, candidate: Any) -> float:
         """Run agent with candidate config, return accuracy (0.0-1.0).
 
         The candidate dict should contain keys matching the seed_candidate
@@ -103,6 +107,10 @@ class LiveEvaluator:
         """
         self._eval_count += 1
         t0 = time.monotonic()
+
+        # Normalize: bare string → system_prompt-only candidate
+        if not isinstance(candidate, dict):
+            candidate = {"system_prompt": str(candidate)}
 
         # Ensure shared components are built
         self._ensure_dataset()
@@ -114,10 +122,16 @@ class LiveEvaluator:
             self._rebuild_backend(candidate)
             self._backend_key = key
 
-        # Extract per-call params
+        # Extract per-call params (defensive against malformed values)
         system_prompt = str(candidate.get("system_prompt", ""))
-        temperature = float(candidate.get("temperature", 0.3))
-        max_tokens = int(candidate.get("max_tokens", 4096))
+        try:
+            temperature = float(candidate.get("temperature", 0.3))
+        except (ValueError, TypeError):
+            temperature = 0.3
+        try:
+            max_tokens = int(candidate.get("max_tokens", 4096))
+        except (ValueError, TypeError):
+            max_tokens = 4096
 
         # Run eval — load() populates internal state, iter_records() yields them
         self._dataset.load(
@@ -164,12 +178,16 @@ class LiveEvaluator:
         return accuracy
 
     def evaluate_single(
-        self, candidate: Dict[str, Any], query: str,
+        self, candidate: Any, query: str,
     ) -> float:
         """Evaluate candidate on a single query. Returns 0.0 or 1.0.
 
         Useful for GEPA's per-example evaluator interface.
         """
+        # Normalize: bare string → system_prompt-only candidate
+        if not isinstance(candidate, dict):
+            candidate = {"system_prompt": str(candidate)}
+
         self._ensure_dataset()
         self._ensure_judge()
 
@@ -179,8 +197,14 @@ class LiveEvaluator:
             self._backend_key = key
 
         system_prompt = str(candidate.get("system_prompt", ""))
-        temperature = float(candidate.get("temperature", 0.3))
-        max_tokens = int(candidate.get("max_tokens", 4096))
+        try:
+            temperature = float(candidate.get("temperature", 0.3))
+        except (ValueError, TypeError):
+            temperature = 0.3
+        try:
+            max_tokens = int(candidate.get("max_tokens", 4096))
+        except (ValueError, TypeError):
+            max_tokens = 4096
 
         # Find matching record from dataset
         self._dataset.load(max_samples=self.max_samples, seed=self.seed)
@@ -233,7 +257,7 @@ class LiveEvaluator:
     def _ensure_dataset(self) -> None:
         if self._dataset is None:
             from openjarvis.evals.cli import _build_dataset
-            self._dataset = _build_dataset(self.benchmark)
+            self._dataset = _build_dataset(self.benchmark, subset=self.benchmark_subset)
 
     def _ensure_judge(self) -> None:
         if self._judge_backend is None:
@@ -246,26 +270,57 @@ class LiveEvaluator:
                 self.benchmark, self._judge_backend, self.judge_model,
             )
 
-    def _rebuild_backend(self, candidate: Dict[str, Any]) -> None:
-        """Rebuild the agent backend from candidate config."""
+    def _rebuild_backend(self, candidate: Any) -> None:
+        """Rebuild the agent backend from candidate config.
+
+        Defensive: handles both dict-candidates and bare-string candidates
+        (which GEPA passes when evolving just the system prompt).
+        """
         if self._backend is not None:
             self._backend.close()
 
         from openjarvis.evals.cli import _build_backend
 
+        # Normalize: if candidate is a string, treat it as a system_prompt-only override
+        if not isinstance(candidate, dict):
+            candidate = {"system_prompt": str(candidate)}
+
         agent_type = str(candidate.get("agent_type", "monitor_operative"))
         tool_set_str = str(candidate.get("tool_set", ""))
         tools = [t.strip() for t in tool_set_str.split(",") if t.strip()]
-        max_turns = int(candidate.get("max_turns", 25))
+        # Defensive int parsing — GEPA reflection sometimes mangles dict values
+        try:
+            max_turns = int(candidate.get("max_turns", 25))
+        except (ValueError, TypeError):
+            max_turns = 25
 
-        self._backend = _build_backend(
-            backend_name="jarvis-agent",
-            engine_key=self.engine_key,
-            agent_name=agent_type,
-            tools=tools,
-            model=self.model,
-            max_turns=max_turns,
-        )
+        # Build backend with custom vLLM port support
+        from openjarvis.evals.backends.jarvis_agent import JarvisAgentBackend
+        from openjarvis.system import SystemBuilder
+        from openjarvis.core.config import JarvisConfig
+
+        cfg = JarvisConfig()
+        cfg.engine.vllm.host = f"http://localhost:{self.vllm_port}"
+
+        builder = SystemBuilder(config=cfg)
+        if self.engine_key:
+            builder.engine(self.engine_key)
+        builder.model(self.model)
+        builder.agent(agent_type)
+        if tools:
+            builder.tools(tools)
+        if max_turns is not None:
+            builder._config.agent.max_turns = max_turns
+
+        # Create a backend-compatible wrapper around the system
+        backend = JarvisAgentBackend.__new__(JarvisAgentBackend)
+        backend._agent_name = agent_type
+        backend._tools = tools
+        backend._telemetry = False
+        backend._gpu_metrics = False
+        backend._system = builder.telemetry(False).traces(True).build()
+
+        self._backend = backend
 
         logger.info(
             "Rebuilt backend: agent=%s, tools=%d, max_turns=%d",

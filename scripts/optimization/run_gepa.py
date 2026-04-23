@@ -132,6 +132,8 @@ def run_gepa(
     max_eval_samples: int,
     output_dir: str,
     seed_candidate: dict | None = None,
+    vllm_port: int = 8000,
+    benchmark_subset: str | None = None,
 ) -> dict:
     """Run GEPA optimization and return results."""
     from gepa.optimize_anything import GEPAConfig, optimize_anything
@@ -154,6 +156,8 @@ def run_gepa(
         benchmark=benchmark,
         engine_key=engine_key,
         max_samples=max_eval_samples,
+        vllm_port=vllm_port,
+        benchmark_subset=benchmark_subset,
     )
 
     # Track all evaluations for analysis
@@ -292,6 +296,8 @@ def main() -> None:
     )
     parser.add_argument("--max-eval-samples", type=int, default=15)
     parser.add_argument("--output-dir", required=True)
+    parser.add_argument("--vllm-port", type=int, default=8000, help="vLLM server port")
+    parser.add_argument("--benchmark-subset", default=None, help="Benchmark subset (e.g. telecom for taubench)")
     args = parser.parse_args()
 
     result = run_gepa(
@@ -304,6 +310,8 @@ def main() -> None:
         reflection_lm=args.reflection_lm,
         max_eval_samples=args.max_eval_samples,
         output_dir=args.output_dir,
+        vllm_port=args.vllm_port,
+        benchmark_subset=args.benchmark_subset,
     )
 
     if result["status"] == "completed":

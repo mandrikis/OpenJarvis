@@ -111,3 +111,10 @@ learning.db
 **/learning/benchmarks/
 **/teacher_traces/
 *.session.json
+
+# Track our NeurIPS 2026 agent-optimization v2 results (despite results/ rule above)
+!results/
+results/*
+!results/neurips-2026/
+results/neurips-2026/*
+!results/neurips-2026/agent-optimization-v2/

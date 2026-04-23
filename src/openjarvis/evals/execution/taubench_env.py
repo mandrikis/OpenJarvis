@@ -141,6 +141,7 @@ class JarvisHalfDuplexAgent:
         model: str,
         temperature: float = 0.7,
         max_tokens: int = 4096,
+        custom_system_prompt: str = "",
     ) -> None:
         self.tools = tools
         self.domain_policy = domain_policy
@@ -148,15 +149,22 @@ class JarvisHalfDuplexAgent:
         self._model = model
         self._temperature = temperature
         self._max_tokens = max_tokens
+        self._custom_system_prompt = custom_system_prompt
 
     @property
     def system_prompt(self) -> str:
         from tau2.agent.llm_agent import AGENT_INSTRUCTION, SYSTEM_PROMPT
 
-        return SYSTEM_PROMPT.format(
+        default = SYSTEM_PROMPT.format(
             domain_policy=self.domain_policy,
             agent_instruction=AGENT_INSTRUCTION,
         )
+        # If caller provided a custom system prompt (e.g. from GEPA), prepend
+        # it to the default tau2 policy+instruction. This lets the evolved
+        # prompt add tool-use priors without losing domain policy grounding.
+        if self._custom_system_prompt:
+            return f"{self._custom_system_prompt}\n\n---\n\n{default}"
+        return default
 
     def get_init_state(self, message_history=None):
         from tau2.agent.llm_agent import LLMAgentState
@@ -257,6 +265,8 @@ class TauBenchTaskEnv:
         num_trials: int = 1,
         telemetry: bool = False,
         gpu_metrics: bool = False,
+        system_prompt: str = "",
+        vllm_host: Optional[str] = None,
     ) -> None:
         self._record = record
         self._num_trials = num_trials
@@ -267,6 +277,8 @@ class TauBenchTaskEnv:
         self._user_model = user_model or "gpt-5-mini-2025-08-07"
         self._telemetry = telemetry
         self._gpu_metrics = gpu_metrics
+        self._system_prompt = system_prompt
+        self._vllm_host = vllm_host
         self._system = None
 
     def __enter__(self) -> TauBenchTaskEnv:
@@ -276,6 +288,9 @@ class TauBenchTaskEnv:
         builder = SystemBuilder()
         if self._engine_key:
             builder.engine(self._engine_key)
+        # Allow per-env vLLM host override (for multi-model port routing)
+        if self._vllm_host:
+            builder._config.engine.vllm.host = self._vllm_host
         if self._gpu_metrics:
             builder._config.telemetry.gpu_metrics = True
         self._system = builder.telemetry(self._telemetry).build()
@@ -318,6 +333,7 @@ class TauBenchTaskEnv:
                     model=self._model,
                     temperature=self._temperature,
                     max_tokens=self._max_tokens,
+                    custom_system_prompt=self._system_prompt,
                 )
 
                 user = build_user(

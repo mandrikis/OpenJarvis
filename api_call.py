@@ -1,59 +1,86 @@
 #!/usr/bin/env python3
 """
-API Client Script
-Calls the API endpoint defined in config.json
+API Call Script
+This script calls the API endpoint defined in config.json
 """
 
 import json
 import requests
-from requests.exceptions import RequestException, Timeout, RetryError
+import time
+from typing import Optional
 
-# Load configuration from config.json
-with open('config.json', 'r') as f:
-    config = json.load(f)
+def load_config(config_path: str = "config.json") -> dict:
+    """Load configuration from JSON file."""
+    with open(config_path, 'r') as f:
+        return json.load(f)
 
-# Extract configuration values
-API_ENDPOINT = config['api_endpoint']
-API_KEY = config['api_key']
-TIMEOUT = config['timeout']
-RETRIES = config['retries']
-
-def call_api():
+def make_api_request(
+    config: dict,
+    max_retries: int = 3,
+    timeout: int = 30
+) -> Optional[dict]:
     """
-    Call the API endpoint with retry logic and timeout handling.
+    Make an API request with retry logic.
+    
+    Args:
+        config: Configuration dictionary containing API details
+        max_retries: Maximum number of retry attempts
+        timeout: Request timeout in seconds
+    
+    Returns:
+        Response data or None if all retries fail
     """
+    endpoint = config.get("api_endpoint")
+    api_key = config.get("api_key")
+    
+    if not endpoint:
+        raise ValueError("API endpoint not found in config")
+    
     headers = {
-        'Content-Type': 'application/json',
-        'Authorization': f'Bearer {API_KEY}'
+        "Content-Type": "application/json"
     }
     
-    for attempt in range(1, RETRIES + 1):
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+    
+    for attempt in range(max_retries):
         try:
-            print(f"Attempt {attempt}/{RETRIES}: Calling API...")
+            print(f"Attempt {attempt + 1}/{max_retries}...")
             response = requests.get(
-                API_ENDPOINT,
+                endpoint,
                 headers=headers,
-                timeout=TIMEOUT
+                timeout=timeout
             )
             response.raise_for_status()
-            
-            print(f"Success! Status code: {response.status_code}")
-            print(f"Response: {response.json()}")
             return response.json()
-            
-        except Timeout:
-            print(f"Attempt {attempt} timed out after {TIMEOUT} seconds")
-        except RequestException as e:
-            print(f"Attempt {attempt} failed: {str(e)}")
-        except RetryError as e:
-            print(f"Attempt {attempt} failed after retries: {str(e)}")
+        except requests.exceptions.RequestException as e:
+            print(f"Request failed: {e}")
+            if attempt < max_retries - 1:
+                wait_time = 2 ** attempt  # Exponential backoff
+                print(f"Retrying in {wait_time} seconds...")
+                time.sleep(wait_time)
+            else:
+                print("All retries exhausted.")
+                return None
+
+def main():
+    """Main function to execute API call."""
+    print("Loading configuration...")
+    config = load_config()
     
-    print("All retry attempts exhausted.")
-    return None
+    print(f"API Endpoint: {config['api_endpoint']}")
+    print(f"Timeout: {config['timeout']}s")
+    print(f"Max Retries: {config['retries']}")
+    print("-" * 50)
+    
+    print("Making API request...")
+    result = make_api_request(config)
+    
+    if result:
+        print("\nResponse received:")
+        print(json.dumps(result, indent=2))
+    else:
+        print("\nNo response received after all retries.")
 
 if __name__ == "__main__":
-    result = call_api()
-    if result:
-        print("\nAPI call completed successfully.")
-    else:
-        print("\nAPI call failed.")
+    main()

@@ -1,26 +1,9 @@
 # Upcoming Tech Conferences
 
-## 1. TechCrunch Disrupt
-- **Date:** October 27-29, 2025
-- **Location:** San Francisco, USA
-- **Website:** https://kadonetworks.com/blog/best-tech-conferences-2024
-
-## 2. Web Summit
-- **Date:** November 9-12, 2025
-- **Location:** Europe
-- **Website:** https://websummit.com
-
-## 3. CES (Consumer Electronics Show)
-- **Date:** January 2025
-- **Location:** Las Vegas, USA
-- **Website:** https://ces.tech
-
-## 4. Microsoft Ignite
-- **Date:** November 2025
-- **Location:** Virtual & Global
-- **Website:** https://ignite.microsoft.com
-
-## 5. IEEE Conference
-- **Date:** Multiple dates throughout 2025
-- **Location:** Global (various locations)
-- **Website:** https://ieee.org
+| Name | Date | Location | Website |
+| :--- | :--- | :--- | :--- |
+| CES 2025 | January 7–10, 2025 | Las Vegas, NV, USA | [ces.tech](https://www.ces.tech) |
+| MWC Barcelona 2025 | March 3–6, 2025 | Barcelona, Spain | [mwcbarcelona.com](https://www.mwcbarcelona.com) |
+| Google I/O 2025 | May 2025 (TBA) | Mountain View, CA, USA | [developers.google.com/io](https://developers.google.com/io) |
+| Web Summit 2025 | November 10–13, 2025 | Lisbon, Portugal | [websummit.com](https://websummit.com) |
+| AWS re:Invent 2025 | Late 2025 (TBA) | Las Vegas, NV, USA | [reinvent.awsevents.com](https://reinvent.awsevents.com) |
