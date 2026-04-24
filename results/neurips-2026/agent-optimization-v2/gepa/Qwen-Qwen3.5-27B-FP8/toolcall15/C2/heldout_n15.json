@@ -6,9 +6,9 @@
   "max_samples": 15,
   "judge_model": "gpt-5-mini-2025-08-07",
   "seed": 42,
-  "optimized_accuracy": 0.0,
-  "optimized_elapsed_seconds": 157.38749571330845,
-  "seed_accuracy": 0.0,
-  "seed_elapsed_seconds": 158.55950863845646,
-  "lift_pp": 0.0
+  "optimized_accuracy": 0.4,
+  "optimized_elapsed_seconds": 96.8196861455217,
+  "seed_accuracy": 0.3333333333333333,
+  "seed_elapsed_seconds": 108.20887379255146,
+  "lift_pp": 6.6666666666666705
 }
