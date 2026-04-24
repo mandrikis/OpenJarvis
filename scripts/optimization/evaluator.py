@@ -318,7 +318,10 @@ class LiveEvaluator:
         backend._tools = tools
         backend._telemetry = False
         backend._gpu_metrics = False
-        backend._system = builder.telemetry(False).traces(True).build()
+        # Disable traces to avoid SQLite contention when multiple pipelines
+        # run in parallel (shared ~/.openjarvis/traces.db contention causes
+        # "database is locked" errors that silently drop evaluation results).
+        backend._system = builder.telemetry(False).traces(False).build()
 
         self._backend = backend
 
