@@ -13,10 +13,10 @@ Replaces m2_run_distilled_evals.sh with a single Python entry point that:
   * checks vLLM health for any size we're about to run
 
 Usage:
-    python run_evals.py                                  # all distilled
-    python run_evals.py --mode baseline                  # all baselines
-    python run_evals.py --apps 9b --experiments gaia     # one cell
-    python run_evals.py --mode distilled --force         # rerun completed
+    python 3_run_evals.py                                  # all distilled
+    python 3_run_evals.py --mode baseline                  # all baselines
+    python 3_run_evals.py --apps 9b --experiments gaia     # one cell
+    python 3_run_evals.py --mode distilled --force         # rerun completed
 """
 
 from __future__ import annotations

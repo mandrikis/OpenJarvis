@@ -2,12 +2,12 @@
 # End-to-end distillation pipeline. Each step is a standalone script — you can
 # run any one of them directly. This wrapper just runs them in order.
 #
-# Steps:
-#   1. gather_consensus_edits.py  → consensus_edits.json
-#   2. apply_consensus_edits.py   → distilled TOML configs
-#   3. run_evals.py --mode baseline
-#   4. run_evals.py --mode distilled
-#   5. compare_results.py         → comparison.json
+# Steps (numeric prefix = run order):
+#   1_gather_consensus_edits.py    → consensus_edits.json
+#   2_apply_consensus_edits.py     → distilled TOML configs
+#   3_run_evals.py --mode baseline → baseline summaries
+#   3_run_evals.py --mode distilled → distilled summaries
+#   4_compare_results.py           → comparison.json
 #
 # Usage:
 #   bash run_pipeline.sh                                 # full pipeline
@@ -37,19 +37,19 @@ done
 
 echo "═══ 1/5  Gathering consensus edits ═══"
 if [[ -n "$TALLIES_FILE" ]]; then
-    "$PYTHON" "$HERE/gather_consensus_edits.py" --tallies-file "$TALLIES_FILE"
+    "$PYTHON" "$HERE/1_gather_consensus_edits.py" --tallies-file "$TALLIES_FILE"
 else
-    "$PYTHON" "$HERE/gather_consensus_edits.py"
+    "$PYTHON" "$HERE/1_gather_consensus_edits.py"
 fi
 
 echo
 echo "═══ 2/5  Applying consensus edits → distilled configs ═══"
-"$PYTHON" "$HERE/apply_consensus_edits.py"
+"$PYTHON" "$HERE/2_apply_consensus_edits.py"
 
 if [[ "$SKIP_BASELINE" -eq 0 ]]; then
     echo
     echo "═══ 3/5  Running baseline evals ═══"
-    "$PYTHON" "$HERE/run_evals.py" --mode baseline
+    "$PYTHON" "$HERE/3_run_evals.py" --mode baseline
 else
     echo
     echo "═══ 3/5  Skipping baseline evals (--skip-baseline) ═══"
@@ -58,7 +58,7 @@ fi
 if [[ "$SKIP_DISTILLED" -eq 0 ]]; then
     echo
     echo "═══ 4/5  Running distilled evals ═══"
-    "$PYTHON" "$HERE/run_evals.py" --mode distilled
+    "$PYTHON" "$HERE/3_run_evals.py" --mode distilled
 else
     echo
     echo "═══ 4/5  Skipping distilled evals (--skip-distilled) ═══"
@@ -66,4 +66,4 @@ fi
 
 echo
 echo "═══ 5/5  Comparing results ═══"
-"$PYTHON" "$HERE/compare_results.py"
+"$PYTHON" "$HERE/4_compare_results.py"

@@ -7,7 +7,7 @@ is a clone of the baseline with the consensus edits applied:
 
   - set_agent_param(temperature)  → [defaults].temperature
   - set_agent_param(max_turns)    → recorded in the comment (applied at runtime
-                                    via OPENJARVIS_CONFIG; see run_evals.py)
+                                    via OPENJARVIS_CONFIG; see 3_run_evals.py)
   - remove_tool_from_agent        → drop from [[benchmarks]].tools
   - add_tool_to_agent             → append to [[benchmarks]].tools
 
@@ -247,7 +247,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     if not args.consensus.exists():
         print(f"ERROR: consensus file not found: {args.consensus}", file=sys.stderr)
-        print("       Run gather_consensus_edits.py first.", file=sys.stderr)
+        print("       Run 1_gather_consensus_edits.py first.", file=sys.stderr)
         return 1
 
     matrix = tomllib.loads(args.matrix.read_text())

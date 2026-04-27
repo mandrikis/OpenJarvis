@@ -1,5 +1,5 @@
 {
-  "_comment": "Snapshot of the M1 tally that produced the original consensus. Pass to gather_consensus_edits.py via --tallies-file to reproduce the M1 consensus without needing the original ~/.openjarvis/learning/sessions directory. Once the real sessions directory is available, run the tallier without --tallies-file to refresh.",
+  "_comment": "Snapshot of the M1 tally that produced the original consensus. Pass to 1_gather_consensus_edits.py via --tallies-file to reproduce the M1 consensus without needing the original ~/.openjarvis/learning/sessions directory. Once the real sessions directory is available, run the tallier without --tallies-file to refresh.",
   "n_sessions": null,
   "n_edits": 1131,
   "source": "m1 sessions snapshot",

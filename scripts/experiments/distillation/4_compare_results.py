@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
 """Compare distilled vs baseline eval results across the matrix.
 
-Reads ``*.summary.json`` files written by run_evals.py from both the baseline
-and distilled results trees, computes per-cell deltas, splits agent vs direct
-benchmarks, and writes a JSON summary.
+Reads ``*.summary.json`` files written by 3_run_evals.py from both the
+baseline and distilled results trees, computes per-cell deltas, splits agent
+vs direct benchmarks, and writes a JSON summary.
 
 Replaces m2_collect_results.py — the Step 1 baseline numbers that script
-hard-coded are no longer needed because run_evals.py with --mode baseline
+hard-coded are no longer needed because 3_run_evals.py with --mode baseline
 writes the same files we'd otherwise read from a Step 1 snapshot.
 
 Usage:
-    python compare_results.py
-    python compare_results.py --baseline-results path/to/old/baselines
+    python 4_compare_results.py
+    python 4_compare_results.py --baseline-results path/to/old/baselines
 """
 
 from __future__ import annotations
