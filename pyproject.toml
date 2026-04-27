@@ -46,7 +46,14 @@ dev = [
     "pre-commit>=3.0",
 ]
 inference-mlx = ["mlx-lm>=0.19; sys_platform == 'darwin'"]
-inference-vllm = ["vllm>=0.16.0"]
+inference-vllm = [
+    "vllm==0.20.0",
+    "transformers>=5.6,<6",
+    # vllm 0.20.0 ships Requires-Dist: mistral_common[image]>=1.11.0; pinning
+    # explicitly here so uv doesn't resolve to an older release through some
+    # other dep path (max published version on pypi is currently 1.11.0).
+    "mistral_common>=1.11",
+]
 inference-cloud = [
     "openai>=1.30",
     "anthropic>=0.30",
