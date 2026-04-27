@@ -29,6 +29,22 @@ Idempotent — safe to re-run.
 
 from __future__ import annotations
 
+
+# distill-streaming-fix
+import logging as _logging
+import sys as _sys
+try:
+    _sys.stdout.reconfigure(line_buffering=True)  # type: ignore[attr-defined]
+    _sys.stderr.reconfigure(line_buffering=True)  # type: ignore[attr-defined]
+except AttributeError:
+    pass
+_logging.basicConfig(
+    level=_logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    stream=_sys.stdout,
+    force=True,
+)
+
 import argparse
 import json
 import os
@@ -168,7 +184,7 @@ def judge_one(ce: CloudEngine, trace_id: str, query: str, result: str) -> dict:
         resp = ce.generate(
             messages=[Message(role=Role.USER, content=prompt)],
             model=MODEL,
-            max_tokens=150,
+            max_tokens=1024,
             temperature=0.0,
         )
         content = resp.get("content", "") or ""

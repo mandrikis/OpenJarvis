@@ -13,6 +13,22 @@ two best-effort fixups:
 
 from __future__ import annotations
 
+
+# distill-streaming-fix
+import logging as _logging
+import sys as _sys
+try:
+    _sys.stdout.reconfigure(line_buffering=True)  # type: ignore[attr-defined]
+    _sys.stderr.reconfigure(line_buffering=True)  # type: ignore[attr-defined]
+except AttributeError:
+    pass
+_logging.basicConfig(
+    level=_logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    stream=_sys.stdout,
+    force=True,
+)
+
 import os
 import shutil
 import subprocess

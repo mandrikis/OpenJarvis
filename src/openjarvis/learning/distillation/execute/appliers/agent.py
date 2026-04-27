@@ -44,17 +44,12 @@ class ReplaceSystemPromptApplier(EditApplier):
     def validate(self, edit: Edit, ctx: ApplyContext) -> ValidationResult:
         if "new_content" not in edit.payload:
             return ValidationResult(ok=False, reason="Missing new_content in payload")
-        agent = _extract_agent_name(edit)
-        prompt_path = _agent_prompt_path(ctx, agent)
-        if not prompt_path.parent.exists():
-            return ValidationResult(
-                ok=False, reason=f"Agent directory not found: {prompt_path.parent}"
-            )
         return ValidationResult(ok=True)
 
     def apply(self, edit: Edit, ctx: ApplyContext) -> ApplyResult:
         agent = _extract_agent_name(edit)
         prompt_path = _agent_prompt_path(ctx, agent)
+        prompt_path.parent.mkdir(parents=True, exist_ok=True)
         prompt_path.write_text(edit.payload["new_content"], encoding="utf-8")
         return ApplyResult(changed_files=[str(prompt_path)])
 
@@ -205,17 +200,12 @@ class EditFewShotExemplarsApplier(EditApplier):
     def validate(self, edit: Edit, ctx: ApplyContext) -> ValidationResult:
         if "exemplars" not in edit.payload:
             return ValidationResult(ok=False, reason="Missing exemplars in payload")
-        agent = _extract_agent_name(edit)
-        agent_dir = ctx.agents_dir / agent
-        if not agent_dir.exists():
-            return ValidationResult(
-                ok=False, reason=f"Agent directory not found: {agent_dir}"
-            )
         return ValidationResult(ok=True)
 
     def apply(self, edit: Edit, ctx: ApplyContext) -> ApplyResult:
         agent = _extract_agent_name(edit)
         fs_path = ctx.agents_dir / agent / "few_shot.json"
+        fs_path.parent.mkdir(parents=True, exist_ok=True)
         fs_path.write_text(
             json.dumps(edit.payload["exemplars"], indent=2),
             encoding="utf-8",
