@@ -2,8 +2,11 @@
 """Step 0: Validate the distillation pipeline environment.
 
 Prints every path and env var the pipeline cares about, whether each
-exists, and exits non-zero if anything critical is missing. Pure
-read-only — never mutates state. Run this before step 1.
+exists, and exits non-zero if anything critical is still missing after
+two best-effort fixups:
+
+  * If env vars (e.g. ANTHROPIC_API_KEY) are unset, source <repo>/.env.
+  * If ~/.openjarvis/learning/ is missing, run `jarvis learning init`.
 
     python 0_check_env.py
 """
@@ -12,6 +15,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -41,6 +45,48 @@ def section(title: str) -> None:
     print("-" * 72)
 
 
+def load_dotenv_if_unset(env_path: Path) -> list[str]:
+    """Populate os.environ from a shell-style .env, only for keys not already set."""
+    if not env_path.exists():
+        return []
+    loaded: list[str] = []
+    for raw in env_path.read_text().splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("export "):
+            line = line[len("export "):]
+        if "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        if key and key not in os.environ:
+            os.environ[key] = value
+            loaded.append(key)
+    return loaded
+
+
+def try_jarvis_learning_init() -> tuple[bool, str]:
+    jarvis = Path(sys.executable).parent / "jarvis"
+    if not jarvis.exists():
+        found = shutil.which("jarvis")
+        if not found:
+            return False, "jarvis CLI not found in venv or PATH"
+        jarvis = Path(found)
+    try:
+        result = subprocess.run(
+            [str(jarvis), "learning", "init"],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+    except Exception as e:
+        return False, f"failed to invoke jarvis: {e}"
+    msg = (result.stdout or result.stderr).strip()
+    return result.returncode == 0, msg
+
+
 def main() -> int:
     if not MATRIX.exists():
         print(f"{FAIL} matrix not found at {MATRIX}", file=sys.stderr)
@@ -61,6 +107,11 @@ def main() -> int:
 
     # ── Required env vars ──────────────────────────────────────────────────
     section("Environment variables")
+    dotenv_path = REPO_ROOT / ".env"
+    loaded_keys = load_dotenv_if_unset(dotenv_path)
+    if loaded_keys:
+        print(f"  {INFO} sourced {len(loaded_keys)} key(s) from {dotenv_path}: "
+              f"{', '.join(loaded_keys)}")
     if os.environ.get("ANTHROPIC_API_KEY"):
         n = len(os.environ["ANTHROPIC_API_KEY"])
         print(f"  {OK} ANTHROPIC_API_KEY   set (len={n}) — used by step 2 judge")
@@ -141,8 +192,16 @@ def main() -> int:
             f"           ↳ {len(sessions)} session(s), {len(plans)} plan.json file(s)"
         )
     else:
-        print(f"  {FAIL} {learn_root} missing — run: jarvis learning init")
-        critical_failures += 1
+        print(f"  {WARN} {learn_root} missing — running: jarvis learning init")
+        ok, msg = try_jarvis_learning_init()
+        if msg:
+            for line in msg.splitlines():
+                print(f"           ↳ {line}")
+        if ok and learn_root.exists():
+            print(f"  {OK} {learn_root}  (created)")
+        else:
+            print(f"  {FAIL} init did not create {learn_root}")
+            critical_failures += 1
 
     # ── Discovered traces.db files ─────────────────────────────────────────
     section("Per-cell traces.db files  (what step 2 will judge by default)")

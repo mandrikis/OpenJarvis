@@ -6,7 +6,8 @@ two modes — `baseline` and `distilled` — selecting the config dir and
 OPENJARVIS_CONFIG override accordingly. Resumable (skips cells whose
 summary.json already reports scored_samples > 0; override with --force).
 Runs in priority order (lower number first, so agent benchmarks come before
-controls). Checks vLLM health for every size in the plan.
+controls). Probes (does not start) vLLM health for every size in the plan;
+start the vLLM servers yourself.
 
 Day-to-day you should call the numbered wrappers, not this file:
 
