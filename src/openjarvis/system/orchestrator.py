@@ -296,6 +296,7 @@ class QueryOrchestrator:
         from openjarvis.core.registry import ToolRegistry
 
         s = self._system
+        workspace = getattr(s, "_workspace", None)
         tools: List[BaseTool] = []
         for name in tool_names:
             try:
@@ -307,6 +308,14 @@ class QueryOrchestrator:
                     from openjarvis.tools.llm_tool import LLMTool
 
                     tools.append(LLMTool(s.engine, model=s.model))
+                elif name in ("file_write", "file_read") and workspace:
+                    # Scope file ops to the per-query workspace so agents can't
+                    # dump artifacts (research reports etc.) into the cwd.
+                    from openjarvis.tools.file_read import FileReadTool
+                    from openjarvis.tools.file_write import FileWriteTool
+
+                    cls = FileWriteTool if name == "file_write" else FileReadTool
+                    tools.append(cls(base_dir=workspace))
                 elif ToolRegistry.contains(name):
                     tools.append(ToolRegistry.create(name))
             except Exception as exc:

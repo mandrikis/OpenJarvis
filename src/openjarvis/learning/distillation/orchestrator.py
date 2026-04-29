@@ -23,10 +23,23 @@ from openjarvis.learning.distillation.gate.cold_start import check_readiness
 from openjarvis.learning.distillation.models import (
     AutonomyMode,
     BenchmarkSnapshot,
+    EditOp,
     EditOutcome,
     EditRiskTier,
     LearningSession,
     SessionStatus,
+)
+
+# Ops that mutate LLM-level prompt content (system prompts and few-shot
+# exemplars). When config_only=True these are skipped so the teacher can
+# only modify the OpenJarvis config (intelligence routing, agent class/
+# params, tool wiring).
+_PROMPT_LEVEL_OPS: frozenset[EditOp] = frozenset(
+    {
+        EditOp.PATCH_SYSTEM_PROMPT,
+        EditOp.REPLACE_SYSTEM_PROMPT,
+        EditOp.EDIT_FEW_SHOT_EXEMPLARS,
+    }
 )
 from openjarvis.learning.distillation.pending_queue import PendingQueue
 from openjarvis.learning.distillation.plan.planner import LearningPlanner
@@ -77,6 +90,7 @@ class DistillationOrchestrator:
         min_improvement: float = 0.0,
         max_regression: float = 0.05,
         subsample_size: int = 50,
+        config_only: bool = False,
     ) -> None:
         self._engine = teacher_engine
         self._model = teacher_model
@@ -96,6 +110,7 @@ class DistillationOrchestrator:
         self._min_improvement = min_improvement
         self._max_regression = max_regression
         self._subsample_size = subsample_size
+        self._config_only = config_only
 
     def run(self, trigger: Any) -> LearningSession:
         """Execute a full distillation session.
@@ -242,6 +257,25 @@ class DistillationOrchestrator:
             outcomes: list[EditOutcome] = []
 
             for edit in plan.edits:
+                # config-only mode: refuse system-prompt and few-shot edits
+                # before any tier/autonomy routing. The teacher may still
+                # propose them; we just never apply them.
+                if self._config_only and edit.op in _PROMPT_LEVEL_OPS:
+                    outcomes.append(
+                        EditOutcome(
+                            edit_id=edit.id,
+                            status="skipped",
+                            benchmark_delta=None,
+                            cluster_deltas={},
+                            error=(
+                                f"config_only mode: op {edit.op.value} "
+                                "(prompt/few-shot) is disabled"
+                            ),
+                            applied_at=None,
+                        )
+                    )
+                    continue
+
                 # Manual autonomy mode: everything goes to review
                 if self._autonomy == AutonomyMode.MANUAL:
                     outcomes.append(

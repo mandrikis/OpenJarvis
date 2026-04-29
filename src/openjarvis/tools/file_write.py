@@ -22,7 +22,13 @@ class FileWriteTool(BaseTool):
     def __init__(
         self,
         allowed_dirs: Optional[List[str]] = None,
+        base_dir: Optional[str] = None,
     ) -> None:
+        self._base_dir = Path(base_dir).resolve() if base_dir else None
+        # When a base_dir is given but allowed_dirs is not, restrict writes to
+        # the base_dir so workspace isolation is the default.
+        if allowed_dirs is None and self._base_dir is not None:
+            allowed_dirs = [str(self._base_dir)]
         self._allowed_dirs = [Path(d).resolve() for d in (allowed_dirs or [])]
 
     @property
@@ -101,6 +107,11 @@ class FileWriteTool(BaseTool):
         create_dirs = params.get("create_dirs", False)
 
         path = Path(file_path)
+        # Resolve relative paths against the configured base_dir (workspace)
+        # so agents writing relative paths land inside their workspace instead
+        # of the eval process's cwd.
+        if not path.is_absolute() and self._base_dir is not None:
+            path = self._base_dir / path
 
         # Block sensitive files (secrets, credentials, keys)
         from openjarvis.security.file_policy import is_sensitive_file

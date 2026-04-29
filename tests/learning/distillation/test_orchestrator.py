@@ -172,3 +172,102 @@ class TestDistillationOrchestrator:
             orch.run(OnDemandTrigger())
 
         assert session_store.save_session.called
+
+    def test_config_only_skips_prompt_and_few_shot_edits(
+        self, tmp_path: Path
+    ) -> None:
+        """In config_only mode, prompt/few-shot edits are never applied."""
+        from openjarvis.learning.distillation.orchestrator import (
+            DistillationOrchestrator,
+        )
+
+        # Engine returns one allowed (intelligence) edit + one prompt edit
+        # + one few-shot edit. Only the intelligence one should apply.
+        engine = MagicMock()
+        engine.generate.return_value = {
+            "content": json.dumps(
+                {
+                    "edits": [
+                        {
+                            "id": "edit-allowed",
+                            "pillar": "intelligence",
+                            "op": "set_model_for_query_class",
+                            "target": "routing.math",
+                            "payload": {
+                                "query_class": "math",
+                                "model": "qwen2.5-coder:14b",
+                            },
+                            "rationale": "ok",
+                            "expected_improvement": "c1",
+                            "risk_tier": "auto",
+                            "references": ["t1"],
+                        },
+                        {
+                            "id": "edit-prompt",
+                            "pillar": "agent",
+                            "op": "replace_system_prompt",
+                            "target": "agents.simple.system_prompt",
+                            "payload": {"new_content": "hello"},
+                            "rationale": "should be skipped",
+                            "expected_improvement": "c1",
+                            "risk_tier": "auto",
+                            "references": ["t1"],
+                        },
+                        {
+                            "id": "edit-fewshot",
+                            "pillar": "agent",
+                            "op": "edit_few_shot_exemplars",
+                            "target": "agents.native_react.few_shot",
+                            "payload": {
+                                "agent": "native_react",
+                                "exemplars": [{"input": "Q", "output": "A"}],
+                            },
+                            "rationale": "should be skipped",
+                            "expected_improvement": "c1",
+                            "risk_tier": "auto",
+                            "references": ["t1"],
+                        },
+                    ]
+                }
+            ),
+            "usage": {"total_tokens": 500},
+            "cost_usd": 0.03,
+            "finish_reason": "stop",
+        }
+
+        orch = DistillationOrchestrator(
+            teacher_engine=engine,
+            teacher_model="claude-opus-4-6",
+            trace_store=MagicMock(count=MagicMock(return_value=30)),
+            benchmark_samples=[],
+            student_runner=MagicMock(),
+            judge=MagicMock(),
+            session_store=MagicMock(),
+            checkpoint_store=MagicMock(
+                current_sha=MagicMock(return_value="abc123"),
+                begin_stage=MagicMock(
+                    return_value=MagicMock(pre_stage_sha="abc123")
+                ),
+            ),
+            openjarvis_home=tmp_path,
+            autonomy_mode=AutonomyMode.AUTO,
+            scorer=lambda **kw: _make_snapshot(0.65),
+            benchmark_version="personal_v1",
+            config_only=True,
+        )
+
+        with patch(
+            "openjarvis.learning.distillation.orchestrator.DiagnosisRunner"
+        ) as MockDiag:
+            MockDiag.return_value.run.return_value = _make_diagnosis_result()
+            session = orch.run(OnDemandTrigger())
+
+        by_id = {o.edit_id: o for o in session.edit_outcomes}
+        assert by_id["edit-prompt"].status == "skipped"
+        assert "config_only" in (by_id["edit-prompt"].error or "")
+        assert by_id["edit-fewshot"].status == "skipped"
+        assert "config_only" in (by_id["edit-fewshot"].error or "")
+        # The non-prompt edit should NOT have been blocked by config_only.
+        assert by_id["edit-allowed"].status != "skipped" or "config_only" not in (
+            by_id["edit-allowed"].error or ""
+        )

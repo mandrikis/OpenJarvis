@@ -22,7 +22,9 @@ class FileReadTool(BaseTool):
     def __init__(
         self,
         allowed_dirs: Optional[List[str]] = None,
+        base_dir: Optional[str] = None,
     ) -> None:
+        self._base_dir = Path(base_dir).resolve() if base_dir else None
         self._allowed_dirs = [Path(d).resolve() for d in (allowed_dirs or [])]
 
     @property
@@ -66,6 +68,10 @@ class FileReadTool(BaseTool):
                 success=False,
             )
         path = Path(file_path)
+        # Resolve relative paths against base_dir (workspace) when set, so
+        # reads stay scoped to the per-query workspace.
+        if not path.is_absolute() and self._base_dir is not None:
+            path = self._base_dir / path
         # Block sensitive files (secrets, credentials, keys)
         from openjarvis.security.file_policy import is_sensitive_file
 

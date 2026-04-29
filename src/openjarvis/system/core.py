@@ -86,6 +86,15 @@ class JarvisSystem:
     skill_manager: Optional[SkillManager] = None
     _learning_orchestrator: Optional[LearningOrchestrator] = None
     _mcp_clients: List[MCPClient] = field(default_factory=list)
+    _workspace: Optional[str] = None
+
+    def set_workspace(self, path: str) -> None:
+        """Scope file_read/file_write to *path* for subsequent ask() calls.
+
+        Used by the eval AgenticRunner to keep per-query file artifacts inside
+        the run's artifacts directory instead of the process cwd.
+        """
+        self._workspace = path
 
     @property
     def security(self) -> SecurityContext:

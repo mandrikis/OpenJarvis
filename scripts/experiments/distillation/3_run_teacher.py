@@ -148,7 +148,97 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Resolve config and exit without invoking the orchestrator.",
     )
+    parser.add_argument(
+        "--config-only",
+        action="store_true",
+        help=(
+            "Restrict the teacher to OpenJarvis-config edits only. Skips any "
+            "proposed system-prompt or few-shot exemplar edits (PATCH_SYSTEM_"
+            "PROMPT, REPLACE_SYSTEM_PROMPT, EDIT_FEW_SHOT_EXEMPLARS). The "
+            "teacher may still emit them in the plan — they just never apply."
+        ),
+    )
+    # ── Gate (optional) ──────────────────────────────────────────────────
+    parser.add_argument(
+        "--family",
+        default=None,
+        help=(
+            "Family slug (e.g. qwen9b, gemma26b). When set with --benchmark, "
+            "auto-resolves --gate-set and --gate-config from "
+            "~/.openjarvis/experiments/<family>/<benchmark>/."
+        ),
+    )
+    parser.add_argument(
+        "--benchmark",
+        default=None,
+        help="Benchmark slug (e.g. gaia, liveresearch). See --family.",
+    )
+    parser.add_argument(
+        "--gate-set",
+        type=Path,
+        default=None,
+        help=(
+            "Path to gate_set.json. If --family + --benchmark are given, "
+            "defaults to ~/.openjarvis/experiments/<family>/<benchmark>/gate_set.json."
+        ),
+    )
+    parser.add_argument(
+        "--gate-config",
+        type=Path,
+        default=None,
+        help=(
+            "Path to distilled.toml driving the gate eval. If --family + "
+            "--benchmark are given, defaults to "
+            "~/.openjarvis/experiments/<family>/<benchmark>/new_configs/distilled.toml."
+        ),
+    )
+    parser.add_argument(
+        "--gate-min-improvement",
+        type=float,
+        default=0.0,
+        help="BenchmarkGate min_improvement (default 0.0 — accept any non-regression).",
+    )
+    parser.add_argument(
+        "--gate-max-regression",
+        type=float,
+        default=0.2,
+        help="BenchmarkGate max_regression per task-cluster (default 0.2).",
+    )
     return parser
+
+
+_FAMILY_TO_OJ_CONFIG = {
+    "qwen9b": "/matx/u/aspark/.openjarvis/oj_configs/config-9b.toml",
+    "gemma26b": "/matx/u/aspark/.openjarvis/oj_configs/config-26b.toml",
+}
+
+
+def _resolve_gate_paths(
+    args: argparse.Namespace,
+) -> tuple[Path | None, Path | None, Path | None]:
+    """Compute (gate_set_path, gate_config_path, oj_config_path)."""
+    gate_set = args.gate_set
+    gate_config = args.gate_config
+    oj_config: Path | None = None
+    if args.family:
+        cand = Path(_FAMILY_TO_OJ_CONFIG.get(args.family, ""))
+        if cand and cand.exists():
+            oj_config = cand
+    if (gate_set is None or gate_config is None) and args.family and args.benchmark:
+        cell = (
+            Path("/matx/u/aspark/.openjarvis/experiments")
+            / args.family
+            / args.benchmark
+        )
+        if gate_set is None:
+            cand = cell / "gate_set.json"
+            if cand.exists():
+                gate_set = cand
+        if gate_config is None:
+            cand = cell / "new_configs" / "distilled.toml"
+            if cand.exists():
+                gate_config = cand
+    return gate_set, gate_config, oj_config
 
 
 def setup_isolated_home(parent_traces_db: Path, child_home: Path) -> None:
@@ -205,6 +295,47 @@ def run_one_session(args: argparse.Namespace, home: Path, traces_db: Path) -> di
     print(f"[step3] benchmark_samples built: {len(benchmark_samples)}")
 
     autonomy = AutonomyMode(args.autonomy)
+
+    # Build CuratedScorer if a gate set is available for this cell.
+    scorer = None
+    gate_set_path, gate_config_path, oj_config_path = _resolve_gate_paths(args)
+    if gate_set_path is not None and gate_config_path is not None:
+        from openjarvis.learning.distillation.gate.curated_scorer import (
+            CuratedScorer,
+            load_gate_set,
+        )
+
+        # Local import keeps eval-pipeline deps out of paths that don't gate.
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        from _gate_runner import build_gate_run_fn  # type: ignore
+
+        meta, samples = load_gate_set(gate_set_path)
+        if oj_config_path is None:
+            print(
+                "[step3] WARNING: --family did not resolve an OPENJARVIS_CONFIG; "
+                "the gate eval may route to OpenAI cloud and 400 on every sample."
+            )
+        run_fn = build_gate_run_fn(
+            distilled_config_path=gate_config_path,
+            concurrency=len(samples),
+            oj_config_path=oj_config_path,
+        )
+        scorer = CuratedScorer(gate_set=samples, run_fn=run_fn)
+        if autonomy == AutonomyMode.AUTO:
+            print(
+                f"[step3] gate enabled (n={len(samples)}); "
+                f"upgrading autonomy auto -> tiered so the gate actually runs"
+            )
+            autonomy = AutonomyMode.TIERED
+        else:
+            print(f"[step3] gate enabled (n={len(samples)}, autonomy={autonomy.value})")
+        print(f"[step3] gate oj_config = {oj_config_path}")
+    elif gate_set_path is not None or gate_config_path is not None:
+        print(
+            f"[step3] gate partial config — gate_set={gate_set_path}, "
+            f"gate_config={gate_config_path}; both required, skipping gate"
+        )
+
     orch = DistillationOrchestrator(
         teacher_engine=cloud_engine,
         teacher_model=args.teacher_model,
@@ -216,11 +347,14 @@ def run_one_session(args: argparse.Namespace, home: Path, traces_db: Path) -> di
         checkpoint_store=CheckpointStore(home),
         openjarvis_home=home,
         autonomy_mode=autonomy,
-        scorer=None,
+        scorer=scorer,
         min_traces=args.min_traces,
         max_cost_usd=args.max_cost_usd,
         max_tool_calls=args.max_tool_calls,
         subsample_size=args.subsample_size,
+        min_improvement=args.gate_min_improvement,
+        max_regression=args.gate_max_regression,
+        config_only=args.config_only,
     )
 
     session = orch.run(
@@ -334,6 +468,8 @@ def fanout_main(args: argparse.Namespace, parent_home: Path, traces_db: Path) ->
                 "--experiment", args.experiment,
                 "--out", str(child_out),
             ]
+            if args.config_only:
+                cmd.append("--config-only")
             log_fp = open(child_log, "w")
             proc = subprocess.Popen(
                 cmd, env=child_env, stdout=log_fp, stderr=subprocess.STDOUT
@@ -466,6 +602,11 @@ def main(argv: list[str] | None = None) -> int:
     print(f"[step3] max_tools    = {args.max_tool_calls}")
     print(f"[step3] min_traces   = {args.min_traces}")
     print(f"[step3] n_sessions   = {args.n_sessions}")
+    print(f"[step3] config_only  = {args.config_only}")
+    gate_set_path, gate_config_path, oj_config_path = _resolve_gate_paths(args)
+    print(f"[step3] gate_set     = {gate_set_path or '(none — gate disabled)'}")
+    print(f"[step3] gate_config  = {gate_config_path or '(none)'}")
+    print(f"[step3] oj_config    = {oj_config_path or '(none)'}")
 
     if args.dry_run:
         return 0

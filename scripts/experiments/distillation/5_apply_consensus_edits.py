@@ -158,10 +158,19 @@ def _tool_name_from_target(target: str) -> str:
 
 
 def _items_for_op(consensus: dict, op: str) -> list[dict]:
-    """Prefer ``consensus.llm_selected[op]`` (one entry per target, chosen by
-    an LLM judge in step 4) over the raw ``consensus.deferred_to_m3[op]``
-    list (which falls back to lexicographic tiebreak in
-    ``_pick_highest_voted_per_target``)."""
+    """Source priority for the deferred-text edit per (op, target):
+
+    1. ``consensus.llm_synthesized[op]`` — step 4 synthesized one payload per
+       target by combining recurring themes across all candidates (preferred).
+    2. ``consensus.llm_selected[op]`` — step 4 picked the most representative
+       existing candidate per target.
+    3. ``consensus.deferred_to_m3[op]`` — raw candidate list, with step 5
+       falling back to lexicographic tiebreak in
+       ``_pick_highest_voted_per_target``.
+    """
+    synth = (consensus.get("llm_synthesized") or {}).get(op) or []
+    if synth:
+        return synth
     llm = (consensus.get("llm_selected") or {}).get(op) or []
     if llm:
         return llm
@@ -786,6 +795,12 @@ def build_per_cell_consensus(
             "edit_few_shot_exemplars": [],
             "edit_tool_description": [],
         },
+        "llm_synthesized": {
+            "patch_system_prompt": [],
+            "replace_system_prompt": [],
+            "edit_few_shot_exemplars": [],
+            "edit_tool_description": [],
+        },
     }
 
     keep_temperature = "temperature" in kept_edit_ids
@@ -810,15 +825,20 @@ def build_per_cell_consensus(
             out["add_tools"].append(t)
 
     # Deferred-text: keep only if its agent/tool id was kept.
+    src_synth = base_consensus.get("llm_synthesized") or {}
     src_llm = base_consensus.get("llm_selected") or {}
     src_def = base_consensus.get("deferred_to_m3") or {}
-    # Prefer llm_selected (matches _items_for_op), fall back to deferred_to_m3.
+    # Source priority matches _items_for_op: synthesized > selected > deferred.
     for op, dst_key in [
         ("replace_system_prompt", "system_prompt"),
         ("edit_few_shot_exemplars", "few_shot"),
         ("edit_tool_description", "tool_desc"),
     ]:
-        items = src_llm.get(op) or src_def.get(op) or []
+        items = src_synth.get(op) or src_llm.get(op) or src_def.get(op) or []
+        # Track which source we read from so we can mirror it back into the
+        # right key on `out` (preserving _items_for_op's priority).
+        is_synth = bool(src_synth.get(op))
+        is_llm = (not is_synth) and bool(src_llm.get(op))
         for item in items:
             target = item.get("target", "")
             if op == "edit_tool_description":
@@ -829,14 +849,17 @@ def build_per_cell_consensus(
                 gate_id = f"{dst_key}:{name}"
             if gate_id in kept_edit_ids:
                 out["deferred_to_m3"][op].append(item)
-                # Also propagate to llm_selected so step 5's _items_for_op
-                # picks it up exactly as before.
-                out["llm_selected"][op].append(item)
+                if is_synth:
+                    out["llm_synthesized"][op].append(item)
+                elif is_llm:
+                    out["llm_selected"][op].append(item)
 
     # Patch system prompt edits aren't enumerated yet — preserve them as-is so
     # step 5 still sees them. (M2 currently uses replace_system_prompt mostly.)
     for op in ("patch_system_prompt",):
-        for item in (src_llm.get(op) or src_def.get(op) or []):
+        for item in (
+            src_synth.get(op) or src_llm.get(op) or src_def.get(op) or []
+        ):
             out["deferred_to_m3"][op].append(item)
             out["llm_selected"][op].append(item)
 

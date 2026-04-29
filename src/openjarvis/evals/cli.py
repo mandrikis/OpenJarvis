@@ -239,7 +239,7 @@ def _build_dataset(benchmark: str, subset: str | None = None):
     elif benchmark == "gaia":
         from openjarvis.evals.datasets.gaia import GAIADataset
 
-        return GAIADataset()
+        return GAIADataset(subset=subset)
     elif benchmark == "frames":
         from openjarvis.evals.datasets.frames import FRAMESDataset
 

@@ -1,0 +1,32 @@
+# GAIA test slice (80% of seed-42-shuffled validation): Gemma-4-26B-A4B-it (vLLM, 1 GPU)
+# Final eval target. Held out from teacher.
+[meta]
+name = "gaia-test-gemma4-26b"
+description = "GAIA test slice on google/gemma-4-26B-A4B-it"
+
+[defaults]
+temperature = 0.6
+max_tokens = 8192
+
+[judge]
+model = "gpt-5-mini-2025-08-07"
+temperature = 0.0
+max_tokens = 4096
+engine = "cloud"
+
+[run]
+max_workers = 1
+output_dir = "results/neurips-2026/baselines/gemma4-26b/gaia-test/"
+seed = 42
+
+[[models]]
+name = "google/gemma-4-26B-A4B-it"
+engine = "vllm"
+num_gpus = 1
+
+[[benchmarks]]
+name = "gaia"
+subset = "test"
+backend = "jarvis-agent"
+agent = "monitor_operative"
+tools = ["think", "calculator", "code_interpreter", "web_search", "file_read"]

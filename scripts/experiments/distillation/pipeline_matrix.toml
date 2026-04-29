@@ -145,6 +145,37 @@ is_control     = false
 priority       = 1
 baseline_tools = ["think", "calculator", "code_interpreter", "web_search", "file_read"]
 
+# In-domain/OOD/combined ablation: teacher trains on `gaia-train` (20%), final
+# eval scored on `gaia-test` (80%). Both slices use seed=42 over the validation
+# set; see _TRAIN_FRACTION in src/openjarvis/evals/datasets/gaia.py.
+[[experiments]]
+name           = "gaia-train"
+benchmark_name = "gaia"
+backend        = "jarvis-agent"
+agent          = "monitor_operative"
+baseline_temp  = 0.6
+max_tokens     = 8192
+judge_model    = "gpt-5-mini-2025-08-07"
+judge_engine   = "cloud"
+is_agent       = true
+is_control     = false
+priority       = 1
+baseline_tools = ["think", "calculator", "code_interpreter", "web_search", "file_read"]
+
+[[experiments]]
+name           = "gaia-test"
+benchmark_name = "gaia"
+backend        = "jarvis-agent"
+agent          = "monitor_operative"
+baseline_temp  = 0.6
+max_tokens     = 8192
+judge_model    = "gpt-5-mini-2025-08-07"
+judge_engine   = "cloud"
+is_agent       = true
+is_control     = false
+priority       = 1
+baseline_tools = ["think", "calculator", "code_interpreter", "web_search", "file_read"]
+
 [[experiments]]
 name           = "liveresearch"
 backend        = "jarvis-agent"

@@ -354,6 +354,262 @@ def _summarize_payload(op: str, payload: dict) -> str:
     return json.dumps(payload, ensure_ascii=False)[:1500]
 
 
+_LLM_SYNTHESIZE_SYSTEM_PROMPT = """You are given N candidate system prompts,
+each proposed independently by a different teacher model for the SAME agent.
+Your job is to write ONE new system prompt that synthesizes the recurring
+themes across the candidates.
+
+Rules:
+- Combine ideas, instructions, and structure that recur across multiple
+  candidates. The more candidates a theme appears in, the more weight it
+  carries.
+- Drop idiosyncratic content that only appears in one or two candidates,
+  unless it directly resolves a failure mode the rest hint at.
+- Do not invent constraints that no candidate proposed (e.g. arbitrary turn
+  caps, search limits) — only carry forward constraints that have consensus
+  support.
+- Keep the prompt clear and self-consistent. No contradictions.
+- Match the candidates' general length and tone.
+
+Output ONLY a JSON object on its own line:
+{"new_content": "<the synthesized system prompt>", "reason": "<one short sentence on what you combined>"}
+"""
+
+
+_LLM_SYNTHESIZE_TOOL_DESC = """You are given N candidate descriptions for the
+SAME tool, each proposed independently by a different teacher model. Write
+ONE new description that synthesizes the recurring guidance.
+
+Rules:
+- Capture what the tool does, when to use it, and any usage cautions that
+  recur across candidates.
+- Drop idiosyncratic phrasing that appears only in one candidate.
+- Keep it concise — match the candidates' typical length.
+
+Output ONLY a JSON object on its own line:
+{"new_description": "<the synthesized tool description>", "reason": "<one short sentence>"}
+"""
+
+
+_LLM_SYNTHESIZE_FEW_SHOT = """You are given N candidate few-shot exemplar
+sets for the SAME agent, each proposed independently by a different teacher
+model. Write ONE new set of exemplars that synthesizes the recurring
+patterns.
+
+Rules:
+- Identify the patterns that recur across candidates: input shape, expected
+  reasoning structure, output format, tool-use cadence.
+- Write NEW exemplars (input + output pairs) that exhibit those recurring
+  patterns. Do not copy verbatim from any single candidate; synthesize.
+- Match the typical number of exemplars across candidates (round to the
+  median if they vary).
+- Keep exemplars realistic — inputs the agent would plausibly receive,
+  outputs that demonstrate the consensus reasoning style.
+- Do not invent factual claims; if the candidate exemplars use placeholder
+  facts, your exemplars may do the same.
+
+Output ONLY a JSON object on its own line:
+{"exemplars": [{"input": "<>", "output": "<>"}, ...], "reason": "<one short sentence>"}
+"""
+
+
+def _build_synthesis_prompt(op: str, target: str, candidates: list[dict]) -> str:
+    """Render the candidate list into a user prompt for the synthesizer."""
+    blocks: list[str] = []
+    for i, c in enumerate(candidates):
+        summary = _summarize_payload(op, c.get("payload") or {})
+        votes = c.get("votes", 1)
+        sids = (c.get("sample_session_ids") or [])[:3]
+        blocks.append(
+            f"--- candidate {i} (votes={votes}, sessions={sids}) ---\n{summary}"
+        )
+    return (
+        f"OP: {op}\nTARGET: {target}\nN_CANDIDATES: {len(candidates)}\n\n"
+        + "\n\n".join(blocks)
+    )
+
+
+def _parse_synthesis_response(op: str, content: str) -> tuple[dict | None, str]:
+    """Parse the LLM's synthesis response into a payload dict + reason string.
+
+    Returns (payload, reason). On parse failure returns (None, error_msg) so
+    the caller can fall back to the highest-voted candidate.
+    """
+    if not content:
+        return None, "(empty response)"
+    try:
+        m = re.search(r"\{.*\}", content, re.S)
+        if not m:
+            return None, "(no JSON object found)"
+        obj = json.loads(m.group(0))
+    except json.JSONDecodeError as e:
+        return None, f"(JSON parse error: {e})"
+    reason = str(obj.get("reason", ""))[:300]
+    if op == "replace_system_prompt":
+        new_content = obj.get("new_content")
+        if not isinstance(new_content, str) or not new_content.strip():
+            return None, "(missing or empty new_content)"
+        return {"new_content": new_content}, reason
+    if op == "edit_tool_description":
+        new_desc = obj.get("new_description")
+        if not isinstance(new_desc, str) or not new_desc.strip():
+            return None, "(missing or empty new_description)"
+        return {"new_description": new_desc}, reason
+    if op == "edit_few_shot_exemplars":
+        exemplars = obj.get("exemplars")
+        if not isinstance(exemplars, list) or not exemplars:
+            return None, "(missing or empty exemplars list)"
+        # Sanity-check shape: each entry must have string input + output.
+        clean: list[dict] = []
+        for ex in exemplars:
+            if not isinstance(ex, dict):
+                continue
+            inp = ex.get("input")
+            out = ex.get("output")
+            if isinstance(inp, str) and isinstance(out, str) and inp and out:
+                clean.append({"input": inp, "output": out})
+        if not clean:
+            return None, "(no valid input/output pairs)"
+        return {"exemplars": clean}, reason
+    return None, f"(unsupported op: {op})"
+
+
+# Ops that have a synthesis prompt; anything else falls back to selection.
+SYNTHESIZE_OPS: tuple[str, ...] = (
+    "replace_system_prompt",
+    "edit_tool_description",
+    "edit_few_shot_exemplars",
+)
+
+
+def _synthesis_system_prompt(op: str) -> str | None:
+    if op == "replace_system_prompt":
+        return _LLM_SYNTHESIZE_SYSTEM_PROMPT
+    if op == "edit_tool_description":
+        return _LLM_SYNTHESIZE_TOOL_DESC
+    if op == "edit_few_shot_exemplars":
+        return _LLM_SYNTHESIZE_FEW_SHOT
+    return None
+
+
+def llm_synthesize_best(
+    deferred: dict[str, list[dict]],
+    *,
+    model: str = "claude-sonnet-4-6",
+    max_tokens: int = 4096,
+) -> dict[str, list[dict]]:
+    """For each (op, target) group with multiple candidates, ask an LLM to
+    synthesize ONE new payload that combines recurring themes across the
+    candidates. Returns {op: [chosen, ...]} mirroring the deferred dict
+    structure but with a single synthesized entry per target.
+
+    Each entry gains:
+      - ``llm_synthesized: True`` (or False if we fell back to selection)
+      - ``llm_reason: str`` — one-sentence explanation
+      - ``llm_n_candidates: int`` — how many candidates fed the synthesis
+      - the synthesized payload replaces ``payload``
+
+    Falls back to the highest-voted candidate (with ``llm_synthesized: False``
+    and a ``llm_fallback_reason``) if synthesis fails to parse, the LLM
+    errors, or the op is not in SYNTHESIZE_OPS.
+    """
+    try:
+        from openjarvis.core.types import Message, Role
+        from openjarvis.engine.cloud import CloudEngine
+    except ImportError as e:
+        print(f"WARN: LLM-synthesize unavailable ({e}); skipping.", file=sys.stderr)
+        return {op: [] for op in DEFERRED_OPS}
+
+    ce = CloudEngine()
+    synthesized: dict[str, list[dict]] = {op: [] for op in DEFERRED_OPS}
+
+    for op, items in deferred.items():
+        # Group candidates by target
+        by_target: dict[str, list[dict]] = defaultdict(list)
+        for it in items:
+            by_target[it["target"]].append(it)
+
+        for target, candidates in by_target.items():
+            if not candidates:
+                continue
+
+            # Always-applicable shortcut: if there's only one candidate, no
+            # synthesis is needed (and synthesizing on n=1 just rewrites it).
+            if len(candidates) == 1:
+                only = dict(candidates[0])
+                only["llm_synthesized"] = False
+                only["llm_reason"] = "only candidate"
+                only["llm_n_candidates"] = 1
+                synthesized[op].append(only)
+                continue
+
+            sys_prompt = _synthesis_system_prompt(op)
+            highest_voted = max(candidates, key=lambda c: c.get("votes", 0))
+
+            if sys_prompt is None:
+                # Op has no synthesis prompt — fall back to highest-voted.
+                fallback = dict(highest_voted)
+                fallback["llm_synthesized"] = False
+                fallback["llm_reason"] = f"op {op} not in SYNTHESIZE_OPS; using highest-voted"
+                fallback["llm_n_candidates"] = len(candidates)
+                synthesized[op].append(fallback)
+                continue
+
+            user_prompt = _build_synthesis_prompt(op, target, candidates)
+
+            try:
+                resp = ce.generate(
+                    messages=[
+                        Message(role=Role.SYSTEM, content=sys_prompt),
+                        Message(role=Role.USER, content=user_prompt),
+                    ],
+                    model=model,
+                    max_tokens=max_tokens,
+                    temperature=0.0,
+                )
+                content = resp.get("content", "") or ""
+                payload, reason = _parse_synthesis_response(op, content)
+            except Exception as e:
+                payload, reason = None, f"(LLM error: {e})"
+
+            if payload is None:
+                # Synthesis failed; fall back to highest-voted candidate.
+                fallback = dict(highest_voted)
+                fallback["llm_synthesized"] = False
+                fallback["llm_fallback_reason"] = reason
+                fallback["llm_n_candidates"] = len(candidates)
+                synthesized[op].append(fallback)
+                print(
+                    f"  [llm-synth] {op} {target}: FALLBACK to highest-voted "
+                    f"({len(candidates)} candidates) — {reason[:120]}"
+                )
+                continue
+
+            entry = {
+                "target": target,
+                "payload": payload,
+                "votes": sum(c.get("votes", 1) for c in candidates),
+                "total_votes_in_group": sum(c.get("votes", 1) for c in candidates),
+                "sample_session_ids": [
+                    sid
+                    for c in candidates
+                    for sid in (c.get("sample_session_ids") or [])
+                ][:5],
+                "llm_synthesized": True,
+                "llm_reason": reason,
+                "llm_n_candidates": len(candidates),
+                "llm_source_session_ids": [
+                    (c.get("sample_session_ids") or [None])[0] for c in candidates
+                ],
+            }
+            synthesized[op].append(entry)
+            print(
+                f"  [llm-synth] {op} {target}: synthesized from "
+                f"{len(candidates)} candidates — {reason[:120]}"
+            )
+    return synthesized
+
+
 def llm_select_best(
     deferred: dict[str, list[dict]],
     *,
@@ -562,6 +818,22 @@ def main(argv: list[str] | None = None) -> int:
         default="claude-sonnet-4-6",
         help="Model used for --llm-select (default: claude-sonnet-4-6).",
     )
+    p.add_argument(
+        "--llm-synthesize",
+        action="store_true",
+        help=(
+            "For each (op, target) in deferred_to_m3 with multiple candidates, "
+            "ask an LLM to synthesize ONE new payload that combines recurring "
+            "themes across the candidates. Applies to replace_system_prompt, "
+            "edit_few_shot_exemplars, and edit_tool_description. Step 5 "
+            "consumes this in preference to --llm-select output."
+        ),
+    )
+    p.add_argument(
+        "--llm-synthesize-model",
+        default="claude-sonnet-4-6",
+        help="Model used for --llm-synthesize (default: claude-sonnet-4-6).",
+    )
     args = p.parse_args(argv)
 
     out_dir: Path = args.out
@@ -617,6 +889,13 @@ def main(argv: list[str] | None = None) -> int:
         consensus["llm_selected"] = llm_select_best(
             consensus["deferred_to_m3"],
             model=args.llm_select_model,
+        )
+    if args.llm_synthesize:
+        print()
+        print("LLM-synthesizing one payload per target from all candidates...")
+        consensus["llm_synthesized"] = llm_synthesize_best(
+            consensus["deferred_to_m3"],
+            model=args.llm_synthesize_model,
         )
     consensus_doc = {
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),

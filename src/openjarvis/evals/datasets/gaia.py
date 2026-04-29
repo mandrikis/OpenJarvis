@@ -16,6 +16,11 @@ from openjarvis.evals.core.types import EvalRecord
 
 _DEFAULT_CACHE_DIR = Path.home() / ".cache" / "gaia_benchmark"
 
+# Fraction of the (seed-shuffled) validation set that goes to the "train" slice;
+# the rest is "test". Used by the in-domain/OOD/combined ablation so the teacher
+# never sees the test split.
+_TRAIN_FRACTION = 0.2
+
 _DEFAULT_INPUT_PROMPT = """Please answer the question below. You should:
 
 - Return only your answer, which should be a number, or a short phrase with as few words as possible, or a comma separated list of numbers and/or strings.
@@ -40,8 +45,17 @@ class GAIADataset(DatasetProvider):
     _default_subset = "2023_all"
     _default_split = "validation"
 
-    def __init__(self, cache_dir: Optional[str] = None) -> None:
+    def __init__(
+        self,
+        cache_dir: Optional[str] = None,
+        subset: Optional[str] = None,
+    ) -> None:
         self._cache_dir = Path(cache_dir) if cache_dir else _DEFAULT_CACHE_DIR
+        if subset is not None and subset not in {"train", "test"}:
+            raise ValueError(
+                f"GAIA subset must be 'train', 'test', or None; got {subset!r}"
+            )
+        self._subset = subset
         self._records: List[EvalRecord] = []
 
     def load(
@@ -86,6 +100,10 @@ class GAIADataset(DatasetProvider):
             rng = random.Random(seed)
             rows = list(rows)
             rng.shuffle(rows)
+
+        if self._subset is not None:
+            cut = int(len(rows) * _TRAIN_FRACTION)
+            rows = rows[:cut] if self._subset == "train" else rows[cut:]
 
         if max_samples is not None:
             rows = rows[:max_samples]
