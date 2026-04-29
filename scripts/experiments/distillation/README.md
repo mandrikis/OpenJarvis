@@ -191,13 +191,44 @@ Reads the matrix and the consensus edits, writes one distilled TOML per
 `(application × experiment)` cell to `paths.distilled_configs_dir`.
 
 ```bash
-python 5_apply_consensus_edits.py
+python 5_apply_consensus_edits.py                          # gate ON (default)
+python 5_apply_consensus_edits.py --no-gate                # skip the gate
+python 5_apply_consensus_edits.py --k-subsample 15         # bigger subsample
+python 5_apply_consensus_edits.py --tolerance 0.02         # allow small noise
 ```
 
 Experiments marked `is_control = true` get a TOML, but with the consensus
 edits *not* applied (so direct/coding/reasoning benchmarks act as
 controls). Non-agent experiments also bypass the consensus edits, since
 the agent layer is where the edits land.
+
+**Subsample gate (default on).** Before writing the distilled TOMLs, step 5
+runs each consensus edit in isolation against a per-cell subsample
+baseline. Each edit is kept only if the post-edit accuracy is no worse
+than baseline minus `--tolerance`. Surviving edits are written into the
+final distilled TOML. Free-text edits (system prompts, few-shot, tool
+descriptions) are embedded **per-cell** under `[benchmarks.overrides.*]`
+so the runtime materialises a hermetic `$OPENJARVIS_HOME` per cell —
+each cell only carries the deferred edits that passed for it. The
+unfiltered audit trail lands in `gate_report.json` next to the consensus
+file.
+
+| Flag | Default | Purpose |
+|---|---|---|
+| `--gate / --no-gate` | `--gate` | Run the per-cell subsample gate. |
+| `--k-subsample N` | `10` | Samples per gate eval (baseline + per edit). |
+| `--tolerance F` | `0.0` | Keep edit if `Δ accuracy ≥ -F`. |
+| `--gate-seed N` | `42` | Deterministic subsample seed (same for baseline and every candidate). |
+| `--gate-work-dir DIR` | `tempfile.mkdtemp` | Where temp gate evals land (kept for debugging). |
+| `--gate-report PATH` | `<consensus dir>/gate_report.json` | Per-cell + per-edit Δ audit JSON. |
+
+Cost note: the gate runs `1 + N_edits` subsample evals per agentic cell.
+With ~7 candidate edits, 4 active cells, and `k_subsample=10`, expect
+~32 eval invocations (each judge-priced).
+
+When `--gate` is on the legacy `--openjarvis-home` global write is
+skipped — per-cell embedding via `[benchmarks.overrides.*]` is used
+instead.
 
 ### 6. `6_run_distilled_eval.py`
 
