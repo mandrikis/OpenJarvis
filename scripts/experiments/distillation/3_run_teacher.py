@@ -116,7 +116,7 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--n-sessions",
         type=int,
-        default=1,
+        default=50,
         help=(
             "Number of parallel sessions to run. Each gets its own isolated "
             "home under --ensemble-dir (001/, 002/, ...)."

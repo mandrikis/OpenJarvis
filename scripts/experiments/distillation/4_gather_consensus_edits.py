@@ -53,6 +53,7 @@ _logging.basicConfig(
 
 import argparse
 import json
+import re
 import sys
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -173,13 +174,26 @@ def edit_to_audit_key(edit: dict) -> EditKey | None:
 
 
 def walk_plans(sessions_root: Path) -> list[tuple[str, dict]]:
-    """Return [(session_id, edit), ...] across every plan.json under root."""
+    """Return [(session_id, edit), ...] across every plan.json under root.
+
+    Recurses into subdirectories so a parent dir containing multiple
+    ensembles (each with its own ``sessions/`` subtree) walks them all.
+    Symlinks are followed.
+    """
     out: list[tuple[str, dict]] = []
     if not sessions_root.exists():
         print(f"WARN: sessions root does not exist: {sessions_root}", file=sys.stderr)
         return out
 
-    for plan_path in sorted(sessions_root.glob("*/plan.json")):
+    seen: set[str] = set()
+    for plan_path in sorted(sessions_root.rglob("plan.json")):
+        try:
+            real = str(plan_path.resolve())
+        except OSError:
+            real = str(plan_path)
+        if real in seen:
+            continue
+        seen.add(real)
         session_id = plan_path.parent.name
         try:
             plan = json.loads(plan_path.read_text())
@@ -300,6 +314,136 @@ def pick_consensus(
     }
 
 
+# ── LLM-select best deferred-text candidate ──────────────────────────────────
+
+
+_LLM_SELECT_SYSTEM = """You are given N candidate edits, all proposed
+independently by different teacher models for the SAME target (e.g. a
+system prompt for one agent, a description for one tool, a few-shot set
+for one agent).
+
+Your job: identify the consensus — what most candidates agree on — and
+pick the single candidate that best represents that consensus. Think of
+it as the median, not the most opinionated outlier.
+
+Look for ideas / instructions / structures that recur across candidates;
+pick the candidate that captures the most of those recurring ideas with
+the least idiosyncratic content.
+
+Output ONLY a JSON object on its own line:
+{"selected_idx": <int>, "reason": "<one short sentence>"}
+"""
+
+
+def _summarize_payload(op: str, payload: dict) -> str:
+    """Truncate large payloads for inclusion in the LLM-select prompt."""
+    if op == "replace_system_prompt":
+        s = (payload or {}).get("new_content", "") or ""
+        return s if len(s) < 2000 else s[:2000] + " …[truncated]"
+    if op == "edit_few_shot_exemplars":
+        ex = (payload or {}).get("exemplars") or []
+        if not ex:
+            return "(empty)"
+        first = ex[0]
+        inp = (first.get("input") or "")[:200]
+        out = (first.get("output") or "")[:600]
+        n = len(ex)
+        return f"[{n} exemplar(s)] input: {inp!r}\\noutput: {out!r}"
+    if op == "edit_tool_description":
+        return ((payload or {}).get("new_description") or "")[:1500]
+    return json.dumps(payload, ensure_ascii=False)[:1500]
+
+
+def llm_select_best(
+    deferred: dict[str, list[dict]],
+    *,
+    model: str = "claude-sonnet-4-6",
+    max_tokens: int = 600,
+) -> dict[str, list[dict]]:
+    """For each (op, target) group with multiple unique candidates, ask an
+    LLM to pick the best one. Returns {op: [chosen, ...]} mirroring the
+    deferred dict structure but with a single chosen entry per target.
+    Each chosen entry gains ``llm_selected: True`` and ``llm_reason: str``.
+    """
+    try:
+        from openjarvis.core.types import Message, Role
+        from openjarvis.engine.cloud import CloudEngine
+    except ImportError as e:
+        print(f"WARN: LLM-select unavailable ({e}); skipping.", file=sys.stderr)
+        return {op: [] for op in DEFERRED_OPS}
+
+    ce = CloudEngine()
+    selected: dict[str, list[dict]] = {op: [] for op in DEFERRED_OPS}
+
+    for op, items in deferred.items():
+        # Group candidates by target
+        by_target: dict[str, list[dict]] = defaultdict(list)
+        for it in items:
+            by_target[it["target"]].append(it)
+
+        for target, candidates in by_target.items():
+            if not candidates:
+                continue
+            if len(candidates) == 1:
+                # Trivial: only one candidate, no choice needed.
+                only = dict(candidates[0])
+                only["llm_selected"] = True
+                only["llm_reason"] = "only candidate"
+                selected[op].append(only)
+                continue
+
+            # Build a numbered prompt
+            blocks: list[str] = []
+            for i, c in enumerate(candidates):
+                summary = _summarize_payload(op, c.get("payload") or {})
+                votes = c.get("votes", 1)
+                sids = (c.get("sample_session_ids") or [])[:3]
+                blocks.append(
+                    f"--- candidate {i} (votes={votes}, sessions={sids}) ---\\n{summary}"
+                )
+            prompt = (
+                f"OP: {op}\\nTARGET: {target}\\nN_CANDIDATES: {len(candidates)}\\n\\n"
+                + "\\n\\n".join(blocks)
+            )
+
+            try:
+                resp = ce.generate(
+                    messages=[
+                        Message(role=Role.SYSTEM, content=_LLM_SELECT_SYSTEM),
+                        Message(role=Role.USER, content=prompt),
+                    ],
+                    model=model,
+                    max_tokens=max_tokens,
+                    temperature=0.0,
+                )
+                content = resp.get("content", "") or ""
+                # Find a JSON object in the response
+                m = re.search(r"\{[^{}]*\"selected_idx\"[^{}]*\}", content, re.S)
+                if m:
+                    obj = json.loads(m.group(0))
+                    idx = int(obj.get("selected_idx", 0))
+                    reason = str(obj.get("reason", ""))[:300]
+                else:
+                    idx, reason = 0, "(parse failed; defaulted to candidate 0)"
+            except Exception as e:
+                idx, reason = 0, f"(LLM error: {e}; defaulted to candidate 0)"
+
+            idx = max(0, min(idx, len(candidates) - 1))
+            chosen = dict(candidates[idx])
+            chosen["llm_selected"] = True
+            chosen["llm_reason"] = reason
+            chosen["llm_n_candidates"] = len(candidates)
+            chosen["llm_chosen_idx"] = idx
+            selected[op].append(chosen)
+            print(
+                f"  [llm-select] {op} {target}: "
+                f"{len(candidates)} candidates → idx {idx} "
+                f"(session {chosen.get('sample_session_ids') or '?'}) "
+                f"— {reason[:120]}"
+            )
+    return selected
+
+
 def build_deferred_to_m3(
     audit_tallies: dict[tuple[str, str, str], Tally],
 ) -> dict[str, list[dict]]:
@@ -404,6 +548,20 @@ def main(argv: list[str] | None = None) -> int:
             "votes. M1 used plurality (~0.4), not strict majority (default: 0.4)."
         ),
     )
+    p.add_argument(
+        "--llm-select",
+        action="store_true",
+        help=(
+            "For each (op, target) in deferred_to_m3 with multiple unique "
+            "candidates, ask an LLM to pick the best one (rather than "
+            "deferring to step 5's lexicographic tiebreak)."
+        ),
+    )
+    p.add_argument(
+        "--llm-select-model",
+        default="claude-sonnet-4-6",
+        help="Model used for --llm-select (default: claude-sonnet-4-6).",
+    )
     args = p.parse_args(argv)
 
     out_dir: Path = args.out
@@ -452,6 +610,14 @@ def main(argv: list[str] | None = None) -> int:
         min_majority=args.min_majority,
     )
     consensus["deferred_to_m3"] = build_deferred_to_m3(audit_tallies)
+
+    if args.llm_select:
+        print()
+        print("LLM-selecting best candidate per target for deferred-text edits...")
+        consensus["llm_selected"] = llm_select_best(
+            consensus["deferred_to_m3"],
+            model=args.llm_select_model,
+        )
     consensus_doc = {
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "source": source,

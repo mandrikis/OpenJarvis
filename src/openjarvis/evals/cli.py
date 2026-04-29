@@ -706,7 +706,7 @@ def _run_single(config, console: Optional[Console] = None) -> object:
             ) as progress:
                 task = progress.add_task("Evaluating samples...", total=num_samples)
                 summary = runner.run(
-                    progress_callback=lambda done, total: progress.update(
+                    progress_callback=lambda done, total, *_: progress.update(
                         task,
                         completed=done,
                     ),
@@ -1368,7 +1368,7 @@ def run_all(
                         total=max_samples,
                     )
                     summary = runner.run(
-                        progress_callback=lambda done, total: progress.update(
+                        progress_callback=lambda done, total, *_: progress.update(
                             task,
                             completed=done,
                         ),
